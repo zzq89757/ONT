@@ -6,10 +6,9 @@ from pysam import AlignmentFile, AlignedSegment
 import pandas as pd
 
 
-
 def quality_check(fq_path: str) -> None:
     # 运行NanoFilt 并处理报告
-    ...
+    system("NanoFilt --help")
     
     
 def sgRNA_detective() -> None:
@@ -36,3 +35,11 @@ def map2reference(fq_path: str, reference_path: str) -> None:
 def parse_alignment_result(bam_file_path: str, res_table_path: str) -> None:
     # 处理比对结果 统计覆盖率 SNP
     ...
+    
+
+def main() -> None:
+    quality_check("")
+    
+    
+if __name__ == "__main__":
+    main()
