@@ -6,9 +6,9 @@ from pysam import AlignmentFile, AlignedSegment
 import pandas as pd
 
 
-def quality_check(fq_path: str) -> None:
+def quality_check(fq_path: str, clean_data_path: str) -> None:
     # 运行NanoFilt 并处理报告
-    system("NanoFilt --help")
+    system(f"gunzip -c {fq_path} | NanoFilt -q 12 -l 1000 --headcrop 50 --tailcrop 50 | gzip > clean_reads.fq.gz")
     
     
 def sgRNA_detective() -> None:
@@ -38,7 +38,7 @@ def parse_alignment_result(bam_file_path: str, res_table_path: str) -> None:
     
 
 def main() -> None:
-    quality_check("")
+    quality_check("","")
     
     
 if __name__ == "__main__":
