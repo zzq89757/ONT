@@ -12,6 +12,7 @@ def quality_check(fq_path: str, clean_data_path: str) -> None:
     
     
 def sgRNA_detective() -> None:
+    # 根据注释文件寻找label为gRNA的位置并进行检测
     ...
     
     
@@ -29,7 +30,7 @@ def mismatch_check() -> None:
 
 def map2reference(fq_path: str, reference_path: str) -> None:
     # 运行minimap2 
-    ...
+    system()
     
     
 def parse_alignment_result(bam_file_path: str, res_table_path: str) -> None:
