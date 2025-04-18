@@ -51,9 +51,9 @@ def mismatch_check() -> None:
     ...
     
 
-def map2reference(fq_path: str, reference_path: str, output_data_path: str) -> None:
+def map2reference(reference_path: str, output_data_path: str) -> None:
     # 运行minimap2
-    aln_cmd_str = f"minimap2 -x map-ont -a -t 24 {reference_path} {fq_path} > {output_data_path}/aln.sam"
+    aln_cmd_str = f"minimap2 -x map-ont -a -t 24 {reference_path} {output_data_path}/clean_reads.fq > {output_data_path}/aln.sam"
     system(aln_cmd_str)
     
     
@@ -63,7 +63,9 @@ def parse_alignment_result(bam_file_path: str, res_table_path: str) -> None:
     
 
 def main() -> None:
-    qc_info_dict = quality_check("../painted_fq/C2931XKUG0-1_c-ps232691-1.fastq","./test/")
+    output_dir = "./test/"
+    # qc_info_dict = quality_check("../painted_fq/C2931XKUG0-1_c-ps232691-1.fastq", output_dir)
+    map2reference("../painted_fq/C2931XKUG0-1_c-ps232691-1_vars_pLann.gbk",output_dir)
     
     
 if __name__ == "__main__":

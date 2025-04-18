@@ -3,3 +3,7 @@
 *.txt
 *.log
 *.html
+*.gbk
+*.sam
+*.bam
+*.fa
