@@ -26,7 +26,7 @@ def quality_check(fq_path: str, output_data_path: str) -> dict:
     nanofilt_cmd = f"NanoFilt -q 10 -l 500 {output_data_path}/adapter_trimmed.fq > {output_data_path}/clean_reads.fq"
     # 运行Nanoplot 生成qc报告
     nanoplot_cmd = f"NanoPlot -t 24 --fastq {output_data_path}/clean_reads.fq -o {qc_res_path} \
-        --tsv_stats --no_static --only-report"
+        --tsv_stats"
     # system(porechop_cmd)
     # system(nanofilt_cmd)
     system(nanoplot_cmd)
@@ -51,9 +51,10 @@ def mismatch_check() -> None:
     ...
     
 
-def map2reference(fq_path: str, reference_path: str) -> None:
-    # 运行minimap2 
-    system()
+def map2reference(fq_path: str, reference_path: str, output_data_path: str) -> None:
+    # 运行minimap2
+    aln_cmd_str = f"minimap2 -x map-ont -a -t 24 {reference_path} {fq_path} > {output_data_path}/aln.sam"
+    system(aln_cmd_str)
     
     
 def parse_alignment_result(bam_file_path: str, res_table_path: str) -> None:
