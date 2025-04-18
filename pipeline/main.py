@@ -16,12 +16,12 @@ def quality_check(fq_path: str, output_data_path: str) -> None:
         Path(qc_res_path).mkdir(exist_ok=1,parents=1)
     # 过滤接头
     porechop_cmd = f"porechop -i {fq_path} -o {output_data_path}/adapter_trimmed.fq --threads 24 \
-         --adapter_threshold 85 --extra_end_trim 20 \
-         --discard_middle"
+         --adapter_threshold 85 --discard_middle"
     # 运行NanoFilt 过滤长度低于阈值以及低质量数据
-    nanofilt_cmd = f"NanoFilt -q 10 -l 500 --headcrop 50 --tailcrop 50 {output_data_path}/adapter_trimmed.fq > {output_data_path}/clean_reads.fq"
+    nanofilt_cmd = f"NanoFilt -q 10 -l 500 {output_data_path}/adapter_trimmed.fq > {output_data_path}/clean_reads.fq"
     # 运行Nanoplot 生成qc报告
-    nanoplot_cmd = f"NanoPlot -t 24 --fastq {output_data_path}/clean_reads.fq -o {qc_res_path}"
+    nanoplot_cmd = f"NanoPlot -t 24 --fastq {output_data_path}/clean_reads.fq -o {qc_res_path} \
+        --tsv_stats --no-static --plots histogram"
     system(porechop_cmd)
     system(nanofilt_cmd)
     system(nanoplot_cmd)
