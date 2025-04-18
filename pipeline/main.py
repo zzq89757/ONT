@@ -6,11 +6,16 @@ from pysam import AlignmentFile, AlignedSegment
 import pandas as pd
 
 
-def extract_qc_info(qc_res_path: str) -> None:
-    ...
+def extract_qc_info(qc_res_path: str) -> dict:
+    # 读取nanoplot的summary文件
+    sum_df = pd.read_csv(f"{qc_res_path}/NanoStats.txt",sep="\t",skiprows=1,header=None).head(8)
+    # 取整数
+    int_li = [x.replace(".0","") for x in sum_df[1]]
+    qc_info_dict = dict(zip(sum_df[0],int_li))
+    return qc_info_dict
 
 
-def quality_check(fq_path: str, output_data_path: str) -> None:
+def quality_check(fq_path: str, output_data_path: str) -> dict:
     qc_res_path = f"{output_data_path}/qc_summary/"
     if not Path(qc_res_path).exists():
         Path(qc_res_path).mkdir(exist_ok=1,parents=1)
@@ -21,12 +26,12 @@ def quality_check(fq_path: str, output_data_path: str) -> None:
     nanofilt_cmd = f"NanoFilt -q 10 -l 500 {output_data_path}/adapter_trimmed.fq > {output_data_path}/clean_reads.fq"
     # 运行Nanoplot 生成qc报告
     nanoplot_cmd = f"NanoPlot -t 24 --fastq {output_data_path}/clean_reads.fq -o {qc_res_path} \
-        --tsv_stats --no-static --plots histogram"
-    system(porechop_cmd)
-    system(nanofilt_cmd)
+        --tsv_stats --no_static --only-report"
+    # system(porechop_cmd)
+    # system(nanofilt_cmd)
     system(nanoplot_cmd)
     # 提取qc 信息
-    extract_qc_info(qc_res_path)
+    return extract_qc_info(qc_res_path)
     
     
 def sgRNA_detective() -> None:
@@ -57,7 +62,7 @@ def parse_alignment_result(bam_file_path: str, res_table_path: str) -> None:
     
 
 def main() -> None:
-    quality_check("../painted_fq/C2931XKUG0-1_c-ps232691-1.fastq","./test/")
+    qc_info_dict = quality_check("../painted_fq/C2931XKUG0-1_c-ps232691-1.fastq","./test/")
     
     
 if __name__ == "__main__":
