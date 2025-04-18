@@ -32,28 +32,56 @@ def quality_check(fq_path: str, output_data_path: str) -> dict:
     system(nanoplot_cmd)
     # 提取qc 信息
     return extract_qc_info(qc_res_path)
-    
-    
-def sgRNA_detective() -> None:
-    # 根据注释文件寻找label为gRNA的位置并进行检测
-    ...
-    
+     
     
 def coverage_check() -> None:
     ...
 
 
-def stop_codon_check() -> None:
-    ...
-    
-
 def mismatch_check() -> None:
     ...
     
 
-def map2reference(reference_path: str, output_data_path: str) -> None:
+def reference_info_from_gbk(gbk_file: str, output_data_path: str) -> dict:
+    # 根据gbk生成fa和储存位置信息的字典
+    output_fa = f"{output_data_path}/ref.fa"
+    fa_handle=open(output_fa,'w')
+    # 读取 GenBank 文件中的记录
+    for record in SeqIO.parse(gbk_file, "genbank"):
+        # 写入fa文件
+        print(f">vector",file=fa_handle)
+        print(record.seq,file=fa_handle)
+        continue
+        print(f"记录ID: {record.id}")
+        print(f"序列长度: {len(record.seq)} bp")
+        print(f"描述: {record.description}\n")
+
+        # 遍历所有注释特征（feature）
+        for feature in record.features:
+            # if feature.type in ["CDS", "gene", "rRNA", "tRNA"]:
+            if feature.type:
+                # 区域位置
+                start = int(feature.location.start)
+                end = int(feature.location.end)
+                strand = feature.location.strand  # 1: 正链，-1: 负链
+                
+                # 尝试获取 gene 名字
+                gene = feature.qualifiers.get("gene", ["未知"])[0]
+                product = feature.qualifiers.get("product", ["未知"])[0]
+
+                # 提取对应的序列
+                seq = feature.extract(record.seq)
+
+                print(f"类型: {feature.type}")
+                print(f"位置: {start} - {end} (strand: {strand})")
+                print(f"基因名: {gene}")
+                print(f"功能: {product}")
+                print(f"序列片段（前50bp）: {seq[:50]}...\n")
+
+
+def map2reference(output_data_path: str) -> None:
     # 运行minimap2
-    aln_cmd_str = f"minimap2 -x map-ont -a -t 24 {reference_path} {output_data_path}/clean_reads.fq > {output_data_path}/aln.sam"
+    aln_cmd_str = f"minimap2 -x map-ont -a -t 24 {output_data_path}/ref.fa {output_data_path}/clean_reads.fq > {output_data_path}/aln.sam"
     system(aln_cmd_str)
     
     
@@ -63,9 +91,12 @@ def parse_alignment_result(bam_file_path: str, res_table_path: str) -> None:
     
 
 def main() -> None:
+    gbk_file = "../painted_fq/C2931XKUG0-1_c-ps232691-1_vars_pLann.gbk"
+    input_fq_file = "../painted_fq/C2931XKUG0-1_c-ps232691-1.fastq"
     output_dir = "./test/"
-    # qc_info_dict = quality_check("../painted_fq/C2931XKUG0-1_c-ps232691-1.fastq", output_dir)
-    map2reference("../painted_fq/C2931XKUG0-1_c-ps232691-1_vars_pLann.gbk",output_dir)
+    # qc_info_dict = quality_check(input_fq_file, output_dir)
+    reference_info_from_gbk(gbk_file, output_dir)
+    map2reference(output_dir)
     
     
 if __name__ == "__main__":
