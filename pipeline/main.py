@@ -2,9 +2,11 @@ from collections import defaultdict
 from os import system
 from pathlib import Path
 from Bio import SeqIO
-from pysam import AlignmentFile, AlignedSegment, index, FastqFile
+import numpy as np
+from pysam import AlignmentFile, AlignedSegment, index, depth, FastqFile
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MultipleLocator
 import seaborn as sns
 
 
@@ -15,38 +17,48 @@ def plot_read_length_distribution(fq_path: str, out_png: str):
             read_lengths.append(len(seq.sequence))
     fq.close()
     # 画图
-    sns.set(style="whitegrid")
-    plt.figure(figsize=(10, 6))
-    sns.histplot(read_lengths, bins=100, kde=True)
+    x_lim = max(read_lengths) // 2000 * 2000 + 2000
+    print(x_lim)
+    sns.set_theme(style="darkgrid")
+    plt.figure(figsize=(20, 6))
+    sns.histplot(read_lengths, bins=100, color="mediumseagreen")
     plt.title("Reads Length Distribution")
     plt.xlabel("Read Length")
+    # plt.xlim(0, x_lim)
+    # plt.xticks(np.arange(0, x_lim, 2000))
     plt.ylabel("Frequency")
     plt.tight_layout()
     plt.savefig(out_png)
     plt.close()
-    
 
-def plot_depth_per_base(bam_path: str, out_png: str):
-    index(bam_path)
-    bamfile = AlignmentFile(bam_path, "r")
-    
-    depths = []
 
-    # 遍历所有参考序列
-    for ref in bamfile.references:
-        for pileupcolumn in bamfile.pileup(ref, truncate=True):
-            depths.append(pileupcolumn.nsegments)
 
-    # 画图
-    plt.figure(figsize=(12, 5))
-    plt.plot(depths, color="dodgerblue", linewidth=0.8)
-    plt.title("Depth per Base")
-    plt.xlabel("Genomic Position")
-    plt.ylabel("Depth")
+def plot(x:list, depths: list, output_png: str) -> None:
+    sns.set_theme(style="darkgrid")
+    plt.figure(figsize=(16, 5))  # 宽高设置
+    plt.plot(x, depths, color="dimgrey", linewidth=0.6)
+    plt.fill_between(x, depths, color="dimgrey")
+
+    plt.xlabel("POS", fontsize=12)
+    plt.ylabel("Depth", fontsize=12)
+
+    plt.title("Sequencing depth pattern map of full length", fontsize=14)
+
     plt.tight_layout()
-    plt.savefig(out_png)
-    plt.close()    
 
+    # 保存图像，去除黑边，白色背景
+    plt.savefig(output_png, dpi=300, facecolor='white')
+    plt.show()
+    
+    
+    
+def plot_depth_per_base(bam_path: str, out_png: str):
+    depth_path = bam_path + ".depth"
+    index(bam_path,"-@","24")
+    depth(bam_path,"-@","24","-o",depth_path)  
+    depths = pd.read_csv(depth_path, sep="\t", header=None)
+    # 画图
+    plot(depths[1], depths[2], out_png)
 
 
 def extract_qc_info(qc_res_path: str) -> dict:
@@ -74,7 +86,7 @@ def quality_check(fq_path: str, output_data_path: str) -> dict:
     # system(nanofilt_cmd)
     # system(nanoplot_cmd)
     # 绘制read len 分布图
-    plot_read_length_distribution(f"{output_data_path}/clean_reads.fq",f"{output_data_path}/read_length_distribution.png")
+    # plot_read_length_distribution(f"{output_data_path}/clean_reads.fq",f"{output_data_path}/read_length_distribution.png")
     plot_depth_per_base("/mnt/ntc_data/wayne/Project/NTC/ONT/pipeline/test/aln.bam",f"{output_data_path}/depth_per_base.png")
     # 提取qc 信息
     return extract_qc_info(qc_res_path)
