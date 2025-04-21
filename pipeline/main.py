@@ -3,11 +3,12 @@ from os import system
 from pathlib import Path
 from Bio import SeqIO
 import numpy as np
-from pysam import AlignmentFile, AlignedSegment, index, depth, FastqFile
+from pysam import AlignmentFile, AlignedSegment, index, depth, flagstat, FastqFile
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
 import seaborn as sns
+import re
 
 
 def plot_read_length_distribution(fq_path: str, out_png: str):
@@ -33,7 +34,7 @@ def plot_read_length_distribution(fq_path: str, out_png: str):
 
 
 
-def plot(x:list, depths: list, output_png: str) -> None:
+def plot_depth_per_base(x:list, depths: list, output_png: str) -> None:
     sns.set_theme(style="darkgrid")
     plt.figure(figsize=(16, 5))  # 宽高设置
     plt.plot(x, depths, color="dimgrey", linewidth=0.6)
@@ -49,16 +50,47 @@ def plot(x:list, depths: list, output_png: str) -> None:
     # 保存图像，去除黑边，白色背景
     plt.savefig(output_png, dpi=300, facecolor='white')
     plt.show()
+
+
+def float_leave_1(num: float) -> str:
+    float_li = str(num).split(".")
+    return f"{float_li[0]}.{float_li[1][:1]}%"
+
     
-    
-    
-def plot_depth_per_base(bam_path: str, out_png: str):
+def obtain_map_result(ref_len: int, bam_path: str, out_png: str) -> dict:
+    # 构建索引，生成深度文件和比对率文件
     depth_path = bam_path + ".depth"
     index(bam_path,"-@","24")
-    depth(bam_path,"-@","24","-o",depth_path)  
+    depth(bam_path,"-@","24","-o",depth_path)
+    # 提取比对率
+    flag_info = flagstat(bam_path,"-@","24","-O","tsv")
+    match = re.search(r"(\d+\.\d+%)\s+N/A\s+mapped %", flag_info)
+    map_ratio = match.group(1)
+    # 深度文件处理
     depths = pd.read_csv(depth_path, sep="\t", header=None)
+    pos_li = depths[1].to_numpy()
+    dep_li = depths[2].to_numpy()
     # 画图
-    plot(depths[1], depths[2], out_png)
+    plot_depth_per_base(pos_li, dep_li, out_png)
+    # 计算Avg depth, Median depth,Coverage, Cov 30x, Cov 100x
+    avg_depth = int(np.mean(dep_li))
+    median_depth = int(np.median(dep_li))
+    cov = float_leave_1(len(dep_li) / ref_len * 100)
+    cov_30x = float_leave_1(len(dep_li > 30) / ref_len * 100)
+    cov_100x = float_leave_1(len(dep_li > 100) / ref_len * 100)
+    
+    # 存入字典
+    map_info_dict = {
+        "ref_len":ref_len,
+        "map_ratio":map_ratio,
+        "avg_depth":avg_depth,
+        "median_depth":median_depth,
+        "coverage":cov,
+        "cov_30x":cov_30x,
+        "cov_100x":cov_100x,
+    }
+
+    return map_info_dict
 
 
 def extract_qc_info(qc_res_path: str) -> dict:
@@ -87,28 +119,21 @@ def quality_check(fq_path: str, output_data_path: str) -> dict:
     # system(nanoplot_cmd)
     # 绘制read len 分布图
     # plot_read_length_distribution(f"{output_data_path}/clean_reads.fq",f"{output_data_path}/read_length_distribution.png")
-    plot_depth_per_base("/mnt/ntc_data/wayne/Project/NTC/ONT/pipeline/test/aln.bam",f"{output_data_path}/depth_per_base.png")
     # 提取qc 信息
     return extract_qc_info(qc_res_path)
      
-    
-def coverage_check() -> None:
-    ...
 
-
-def mismatch_check() -> None:
-    ...
-    
-
-def reference_info_from_gbk(gbk_file: str, output_data_path: str) -> dict:
+def reference_info_from_gbk(gbk_file: str, output_data_path: str) -> int:
     # 根据gbk生成fa和储存位置信息的字典
     output_fa = f"{output_data_path}/ref.fa"
     fa_handle=open(output_fa,'w')
+    ref_len = 0
     # 读取 GenBank 文件中的记录
     for record in SeqIO.parse(gbk_file, "genbank"):
         # 写入fa文件
         print(f">vector",file=fa_handle)
         print(record.seq,file=fa_handle)
+        ref_len = len(record.seq)
         continue
         print(f"记录ID: {record.id}")
         print(f"序列长度: {len(record.seq)} bp")
@@ -135,7 +160,7 @@ def reference_info_from_gbk(gbk_file: str, output_data_path: str) -> dict:
                 print(f"基因名: {gene}")
                 print(f"功能: {product}")
                 print(f"序列片段（前50bp）: {seq[:50]}...\n")
-
+    return ref_len
 
 def map2reference(output_data_path: str) -> None:
     # 运行minimap2
@@ -153,8 +178,10 @@ def main() -> None:
     input_fq_file = "../painted_fq/C2931XKUG0-1_c-ps232691-1.fastq"
     output_dir = "./test/"
     qc_info_dict = quality_check(input_fq_file, output_dir)
-    # reference_info_from_gbk(gbk_file, output_dir)
+    ref_len = reference_info_from_gbk(gbk_file, output_dir)
     # map2reference(output_dir)
+    map_info_dict = obtain_map_result(ref_len, f"{output_dir}/aln.bam",f"{output_dir}/depth_per_base.png")
+
     
     
 if __name__ == "__main__":
