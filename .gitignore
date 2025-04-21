@@ -4,7 +4,6 @@
 *.log
 *.html
 *.gbk
-*.sam
-*.bam
+*.*am*
 *.fa
 *png

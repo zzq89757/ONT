@@ -2,18 +2,18 @@ from collections import defaultdict
 from os import system
 from pathlib import Path
 from Bio import SeqIO
-from pysam import AlignmentFile, AlignedSegment, index
+from pysam import AlignmentFile, AlignedSegment, index, FastqFile
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+
 def plot_read_length_distribution(fq_path: str, out_png: str):
-    read_lengths = []  
-    with open(fq_path, "rt") as fq:
-        for i, line in enumerate(fq):
-            if i % 4 == 1:  # 第二行是序列
-                read_lengths.append(len(line.strip()))
-    
+    read_lengths = []
+    with FastqFile(fq_path) as fq:
+        for seq in fq:
+            read_lengths.append(len(seq.sequence))
+    fq.close()
     # 画图
     sns.set(style="whitegrid")
     plt.figure(figsize=(10, 6))
