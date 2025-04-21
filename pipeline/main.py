@@ -33,66 +33,6 @@ def plot_read_length_distribution(fq_path: str, out_png: str):
     plt.close()
 
 
-
-def plot_depth_per_base(x:list, depths: list, output_png: str) -> None:
-    sns.set_theme(style="darkgrid")
-    plt.figure(figsize=(16, 5))  # 宽高设置
-    plt.plot(x, depths, color="dimgrey", linewidth=0.6)
-    plt.fill_between(x, depths, color="dimgrey")
-
-    plt.xlabel("POS", fontsize=12)
-    plt.ylabel("Depth", fontsize=12)
-
-    plt.title("Sequencing depth pattern map of full length", fontsize=14)
-
-    plt.tight_layout()
-
-    # 保存图像，去除黑边，白色背景
-    plt.savefig(output_png, dpi=300, facecolor='white')
-    plt.show()
-
-
-def float_leave_1(num: float) -> str:
-    float_li = str(num).split(".")
-    return f"{float_li[0]}.{float_li[1][:1]}%"
-
-    
-def obtain_map_result(ref_len: int, bam_path: str, out_png: str) -> dict:
-    # 构建索引，生成深度文件和比对率文件
-    depth_path = bam_path + ".depth"
-    index(bam_path,"-@","24")
-    depth(bam_path,"-@","24","-o",depth_path)
-    # 提取比对率
-    flag_info = flagstat(bam_path,"-@","24","-O","tsv")
-    match = re.search(r"(\d+\.\d+%)\s+N/A\s+mapped %", flag_info)
-    map_ratio = match.group(1)
-    # 深度文件处理
-    depths = pd.read_csv(depth_path, sep="\t", header=None)
-    pos_li = depths[1].to_numpy()
-    dep_li = depths[2].to_numpy()
-    # 画图
-    plot_depth_per_base(pos_li, dep_li, out_png)
-    # 计算Avg depth, Median depth,Coverage, Cov 30x, Cov 100x
-    avg_depth = int(np.mean(dep_li))
-    median_depth = int(np.median(dep_li))
-    cov = float_leave_1(len(dep_li) / ref_len * 100)
-    cov_30x = float_leave_1(len(dep_li > 30) / ref_len * 100)
-    cov_100x = float_leave_1(len(dep_li > 100) / ref_len * 100)
-    
-    # 存入字典
-    map_info_dict = {
-        "ref_len":ref_len,
-        "map_ratio":map_ratio,
-        "avg_depth":avg_depth,
-        "median_depth":median_depth,
-        "coverage":cov,
-        "cov_30x":cov_30x,
-        "cov_100x":cov_100x,
-    }
-
-    return map_info_dict
-
-
 def extract_qc_info(qc_res_path: str) -> dict:
     # 读取nanoplot的summary文件
     sum_df = pd.read_csv(f"{qc_res_path}/NanoStats.txt",sep="\t",skiprows=1,header=None).head(8)
@@ -162,14 +102,79 @@ def reference_info_from_gbk(gbk_file: str, output_data_path: str) -> int:
                 print(f"序列片段（前50bp）: {seq[:50]}...\n")
     return ref_len
 
+
 def map2reference(output_data_path: str) -> None:
     # 运行minimap2
     aln_cmd_str = f"minimap2 -x map-ont -a -t 24 {output_data_path}/ref.fa {output_data_path}/clean_reads.fq | samtools sort -@ 24 -O BAM - > {output_data_path}/aln.bam"
     system(aln_cmd_str)
+
+
+def plot_depth_per_base(x:list, depths: list, output_png: str) -> None:
+    sns.set_theme(style="darkgrid")
+    plt.figure(figsize=(16, 5))  # 宽高设置
+    plt.plot(x, depths, color="dimgrey", linewidth=0.6)
+    plt.fill_between(x, depths, color="dimgrey")
+
+    plt.xlabel("POS", fontsize=12)
+    plt.ylabel("Depth", fontsize=12)
+
+    plt.title("Sequencing depth pattern map of full length", fontsize=14)
+
+    plt.tight_layout()
+
+    # 保存图像，去除黑边，白色背景
+    plt.savefig(output_png, dpi=300, facecolor='white')
+    plt.show()
+
+
+def float_leave_1(num: float) -> str:
+    float_li = str(num).split(".")
+    return f"{float_li[0]}.{float_li[1][:1]}%"
+
+    
+def obtain_map_result(ref_len: int, bam_path: str, out_png: str) -> dict:
+    # 构建索引，生成深度文件和比对率文件
+    depth_path = bam_path + ".depth"
+    index(bam_path,"-@","24")
+    depth(bam_path,"-@","24","-o",depth_path)
+    # 提取比对率
+    flag_info = flagstat(bam_path,"-@","24","-O","tsv")
+    match = re.search(r"(\d+\.\d+%)\s+N/A\s+mapped %", flag_info)
+    map_ratio = match.group(1)
+    # 深度文件处理
+    depths = pd.read_csv(depth_path, sep="\t", header=None)
+    pos_li = depths[1].to_numpy()
+    dep_li = depths[2].to_numpy()
+    # 画图
+    plot_depth_per_base(pos_li, dep_li, out_png)
+    # 计算Avg depth, Median depth,Coverage, Cov 30x, Cov 100x
+    avg_depth = int(np.mean(dep_li))
+    median_depth = int(np.median(dep_li))
+    cov = float_leave_1(len(dep_li) / ref_len * 100)
+    cov_30x = float_leave_1(len(dep_li > 30) / ref_len * 100)
+    cov_100x = float_leave_1(len(dep_li > 100) / ref_len * 100)
+    
+    # 存入字典
+    map_info_dict = {
+        "ref_len":ref_len,
+        "map_ratio":map_ratio,
+        "avg_depth":avg_depth,
+        "median_depth":median_depth,
+        "coverage":cov,
+        "cov_30x":cov_30x,
+        "cov_100x":cov_100x,
+    }
+
+    return map_info_dict
     
     
-def parse_alignment_result(bam_file_path: str, res_table_path: str) -> None:
+def process_snp(bam_file_path: str, res_table_path: str) -> None:
     # 处理比对结果 统计覆盖率 SNP
+    snp_call_cmd = f""
+    system(snp_call_cmd)
+    
+
+def annotation_snp_in_gbk() -> None:
     ...
     
 
