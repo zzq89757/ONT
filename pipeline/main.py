@@ -2,6 +2,7 @@ from collections import defaultdict
 from os import system
 from pathlib import Path
 from Bio import SeqIO
+from Bio.SeqFeature import SeqFeature, FeatureLocation
 import numpy as np
 from pysam import AlignmentFile, AlignedSegment, index, depth, flagstat, FastqFile
 import pandas as pd
@@ -168,14 +169,61 @@ def obtain_map_result(ref_len: int, bam_path: str, out_png: str) -> dict:
     return map_info_dict
     
     
-def process_snp(bam_file_path: str, res_table_path: str) -> None:
-    # 处理比对结果 统计覆盖率 SNP
-    snp_call_cmd = f""
+def process_snp(output_dir: str) -> dict:
+    snp_info_dict = {}
+    # 使用medaka call SNP
+    output_vcf = f"{output_dir}/var.vcf"
+    snp_call_cmd = f"medaka_variant \
+        -i {output_dir}/aln.bam \
+        -f {output_dir}/ref.fa \
+        -m r941_min_sup_g507 \
+        -o {output_dir} "
+    
     system(snp_call_cmd)
+    return snp_info_dict
     
 
-def annotation_snp_in_gbk() -> None:
-    ...
+def annotate_snp_to_gbk(gbk_file: str, vcf_file: str, output_file: str) -> None:
+    # 读取 gbk 文件
+    record = SeqIO.read(gbk_file, "genbank")
+
+    # 读取 VCF 文件中 SNP 位点（忽略 header）
+    snps = []
+    with open(vcf_file) as vcf:
+        for line in vcf:
+            if line.startswith("#"):
+                continue
+            parts = line.strip().split("\t")
+            pos = int(parts[1]) - 1  # VCF 是1-based，Biopython是0-based
+            ref = parts[3]
+            alt = parts[4]
+            snps.append((pos, ref, alt))
+
+    # 添加 feature 注释
+    for pos, ref, alt in snps:
+        feature = SeqFeature(
+            location=FeatureLocation(pos, pos + 1),
+            type="variation",
+            qualifiers={
+                "note": [f"SNP: {ref}>{alt}"],
+                "ref": ref,
+                "alt": alt
+            }
+        )
+        record.features.append(feature)
+
+    # 写出新的 gbk 文件
+    with open(output_file, "w") as out_handle:
+        SeqIO.write(record, out_handle, "genbank")
+    
+
+def report_generate(qc_info_dict: dict, map_info_dict: dict, snp_info_dict: dict, output_dir: str) -> None:
+    # 将qc map snp 信息存入同一字典
+    data_dict = {}
+    data_dict["qc_info"] = qc_info_dict
+    data_dict["map_info"] = map_info_dict
+    data_dict["snp_info"] = snp_info_dict
+    # 
     
 
 def main() -> None:
@@ -186,7 +234,10 @@ def main() -> None:
     ref_len = reference_info_from_gbk(gbk_file, output_dir)
     # map2reference(output_dir)
     map_info_dict = obtain_map_result(ref_len, f"{output_dir}/aln.bam",f"{output_dir}/depth_per_base.png")
-
+    snp_info_dict = process_snp(output_dir)
+    annotated_gbk = gbk_file.replace(".gbk","_annotated.gbk")
+    annotate_snp_to_gbk(gbk_file,f"{output_dir}/var.vcf",annotated_gbk)
+    report_generate(qc_info_dict, map_info_dict, snp_info_dict, output_dir)
     
     
 if __name__ == "__main__":
