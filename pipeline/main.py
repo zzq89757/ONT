@@ -1,15 +1,15 @@
-from collections import defaultdict
 from os import system
 from pathlib import Path
 from Bio import SeqIO
 from Bio.SeqFeature import SeqFeature, FeatureLocation
 import numpy as np
-from pysam import AlignmentFile, AlignedSegment, index, depth, flagstat, FastqFile
+from pysam import index, depth, flagstat, FastqFile
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MultipleLocator
 import seaborn as sns
 import re
+from docx2pdf import convert
+from docxtpl import DocxTemplate
 
 
 def plot_read_length_distribution(fq_path: str, out_png: str):
@@ -223,7 +223,11 @@ def report_generate(qc_info_dict: dict, map_info_dict: dict, snp_info_dict: dict
     data_dict["qc_info"] = qc_info_dict
     data_dict["map_info"] = map_info_dict
     data_dict["snp_info"] = snp_info_dict
-    # 
+    # 渲染报告并转PDF
+    doc = DocxTemplate(r".\tNGS检测报告模板v5.docx")
+    doc.render(data_dict)
+    doc.save(f"{output_dir}/report.docx")
+    convert(f"{output_dir}/report.docx")
     
 
 def main() -> None:
