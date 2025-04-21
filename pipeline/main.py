@@ -75,7 +75,7 @@ def quality_check(fq_path: str, output_data_path: str) -> dict:
     # system(nanoplot_cmd)
     # 绘制read len 分布图
     plot_read_length_distribution(f"{output_data_path}/clean_reads.fq",f"{output_data_path}/read_length_distribution.png")
-    plot_depth_per_base("/mnt/ntc_data/wayne/Project/NTC/ONT/pipeline/test/aln.sam",f"{output_data_path}/depth_per_base.png")
+    plot_depth_per_base("/mnt/ntc_data/wayne/Project/NTC/ONT/pipeline/test/aln.bam",f"{output_data_path}/depth_per_base.png")
     # 提取qc 信息
     return extract_qc_info(qc_res_path)
      
@@ -127,7 +127,7 @@ def reference_info_from_gbk(gbk_file: str, output_data_path: str) -> dict:
 
 def map2reference(output_data_path: str) -> None:
     # 运行minimap2
-    aln_cmd_str = f"minimap2 -x map-ont -a -t 24 {output_data_path}/ref.fa {output_data_path}/clean_reads.fq | samtools sort -@ 24 -O BAM - > {output_data_path}/aln.sam"
+    aln_cmd_str = f"minimap2 -x map-ont -a -t 24 {output_data_path}/ref.fa {output_data_path}/clean_reads.fq | samtools sort -@ 24 -O BAM - > {output_data_path}/aln.bam"
     system(aln_cmd_str)
     
     
