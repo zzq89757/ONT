@@ -75,32 +75,6 @@ def reference_info_from_gbk(gbk_file: str, output_data_path: str) -> int:
         print(f">vector",file=fa_handle)
         print(record.seq,file=fa_handle)
         ref_len = len(record.seq)
-        continue
-        print(f"记录ID: {record.id}")
-        print(f"序列长度: {len(record.seq)} bp")
-        print(f"描述: {record.description}\n")
-
-        # 遍历所有注释特征（feature）
-        for feature in record.features:
-            # if feature.type in ["CDS", "gene", "rRNA", "tRNA"]:
-            if feature.type:
-                # 区域位置
-                start = int(feature.location.start)
-                end = int(feature.location.end)
-                strand = feature.location.strand  # 1: 正链，-1: 负链
-                
-                # 尝试获取 gene 名字
-                gene = feature.qualifiers.get("gene", ["未知"])[0]
-                product = feature.qualifiers.get("product", ["未知"])[0]
-
-                # 提取对应的序列
-                seq = feature.extract(record.seq)
-
-                print(f"类型: {feature.type}")
-                print(f"位置: {start} - {end} (strand: {strand})")
-                print(f"基因名: {gene}")
-                print(f"功能: {product}")
-                print(f"序列片段（前50bp）: {seq[:50]}...\n")
     return ref_len
 
 
@@ -246,3 +220,4 @@ def main() -> None:
     
 if __name__ == "__main__":
     main()
+    
