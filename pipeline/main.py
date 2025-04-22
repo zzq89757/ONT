@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import re
 from docx2pdf import convert
-from docxtpl import DocxTemplate
+from docxtpl import DocxTemplate, InlineImage
 
 
 def plot_read_length_distribution(fq_path: str, out_png: str):
@@ -103,6 +103,7 @@ def plot_depth_per_base(x:list, depths: list, output_png: str) -> None:
 
 
 def float_leave_1(num: float) -> str:
+    '''生成保留一位小数的百分比格式字符串'''
     float_li = str(num).split(".")
     return f"{float_li[0]}.{float_li[1][:1]}%"
 
@@ -158,6 +159,7 @@ def process_mutation(output_dir: str) -> dict:
         -o {output_dir} "
     
     system(snp_call_cmd)
+    # 将mutation分类至high confidence 和 low confidence并存入字典
     mutation_classify(output_vcf,snp_info_dict)
     return snp_info_dict
     
@@ -194,7 +196,14 @@ def annotate_mutation_to_gbk(gbk_file: str, vcf_file: str, output_file: str) -> 
     # 写出新的 gbk 文件
     with open(output_file, "w") as out_handle:
         SeqIO.write(record, out_handle, "genbank")
-    
+
+
+def image_insert(doc: DocxTemplate, data_dict: dict, output_dir: str) -> None:
+    read_len_distribution_image_path = f"{output_dir}/read_length_distribution.png"
+    depth_distribution_image_path = f"{output_dir}/depth_per_base.png"
+    data_dict['image1'] = InlineImage(doc,read_len_distribution_image_path)
+    data_dict['image2'] = InlineImage(doc,depth_distribution_image_path)
+  
 
 def report_generate(qc_info_dict: dict, map_info_dict: dict, snp_info_dict: dict, output_dir: str) -> None:
     # 将qc map snp 信息存入同一字典
@@ -202,8 +211,11 @@ def report_generate(qc_info_dict: dict, map_info_dict: dict, snp_info_dict: dict
     data_dict.update(qc_info_dict)
     data_dict.update(map_info_dict)
     data_dict.update(snp_info_dict)
-    # 渲染报告并转PDF
+    # 读取模版
     doc = DocxTemplate(r".\Nanopore_result template.docx")
+    # 插入图片
+    image_insert(doc,data_dict,output_dir)
+    # 渲染报告并转PDF
     doc.render(data_dict)
     doc.save(f"{output_dir}/report.docx")
     convert(f"{output_dir}/report.docx")
