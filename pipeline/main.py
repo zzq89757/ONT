@@ -141,9 +141,13 @@ def obtain_map_result(ref_len: int, bam_path: str, out_png: str) -> dict:
     }
 
     return map_info_dict
+
+
+def mutation_classify(output_vcf: str, snp_info_dict: dict) -> None:
+    ...
+ 
     
-    
-def process_snp(output_dir: str) -> dict:
+def process_mutation(output_dir: str) -> dict:
     snp_info_dict = {}
     # 使用medaka call SNP
     output_vcf = f"{output_dir}/var.vcf"
@@ -154,10 +158,11 @@ def process_snp(output_dir: str) -> dict:
         -o {output_dir} "
     
     system(snp_call_cmd)
+    mutation_classify(output_vcf,snp_info_dict)
     return snp_info_dict
     
 
-def annotate_snp_to_gbk(gbk_file: str, vcf_file: str, output_file: str) -> None:
+def annotate_mutation_to_gbk(gbk_file: str, vcf_file: str, output_file: str) -> None:
     # 读取 gbk 文件
     record = SeqIO.read(gbk_file, "genbank")
 
@@ -194,11 +199,11 @@ def annotate_snp_to_gbk(gbk_file: str, vcf_file: str, output_file: str) -> None:
 def report_generate(qc_info_dict: dict, map_info_dict: dict, snp_info_dict: dict, output_dir: str) -> None:
     # 将qc map snp 信息存入同一字典
     data_dict = {}
-    data_dict["qc_info"] = qc_info_dict
-    data_dict["map_info"] = map_info_dict
-    data_dict["snp_info"] = snp_info_dict
+    data_dict.update(qc_info_dict)
+    data_dict.update(map_info_dict)
+    data_dict.update(snp_info_dict)
     # 渲染报告并转PDF
-    doc = DocxTemplate(r".\tNGS检测报告模板v5.docx")
+    doc = DocxTemplate(r".\Nanopore_result template.docx")
     doc.render(data_dict)
     doc.save(f"{output_dir}/report.docx")
     convert(f"{output_dir}/report.docx")
@@ -212,9 +217,9 @@ def main() -> None:
     ref_len = reference_info_from_gbk(gbk_file, output_dir)
     # map2reference(output_dir)
     map_info_dict = obtain_map_result(ref_len, f"{output_dir}/aln.bam",f"{output_dir}/depth_per_base.png")
-    snp_info_dict = process_snp(output_dir)
+    snp_info_dict = process_mutation(output_dir)
     annotated_gbk = gbk_file.replace(".gbk","_annotated.gbk")
-    annotate_snp_to_gbk(gbk_file,f"{output_dir}/var.vcf",annotated_gbk)
+    annotate_mutation_to_gbk(gbk_file,f"{output_dir}/var.vcf",annotated_gbk)
     report_generate(qc_info_dict, map_info_dict, snp_info_dict, output_dir)
     
     
