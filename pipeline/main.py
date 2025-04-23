@@ -154,6 +154,13 @@ def extract_vcf_info(cvf_path: str) -> list:
     ...
 
 
+def is_low_complexity(seq: str) -> int:
+    # 切2-mer 统计种类
+    kmers = [seq[i:i+2] for i in range(len(seq) - 2 + 1)]
+    return len(set(kmers)) < 3
+        
+
+
 def mutation_classify(output_vcf: str,ref_seq: str) -> list:
     # 读取 VCF 文件中 SNP 位点（忽略 header）
     snps = []
@@ -167,18 +174,24 @@ def mutation_classify(output_vcf: str,ref_seq: str) -> list:
             qd = rec.info.get('QD', '.')
             fs = rec.info.get('FS', '.')
             mq = rec.info.get('MQ', '.')
+            af = rec.info.get('AF', '.')
             # (QD < 2.0 || FS > 60.0 || MQ < 40.0)?
             if qd < 2 or fs > 60 or mq < 40:
                 confidence = 0
-            snps.append({"pos":pos, "ref":ref, "alt":alt, "qd":qd, "fs":fs, "mq":mq, "confidence":confidence})
-    # 检查SNP上下游是否为polyA和polyT 
-    print(ref_seq[100:200])
-    for site in snps:
+            # type:SNP/SV
+            max_alt_len = max([len(a) for a in rec.alts])
+            indel_num = abs(len(ref) - max_alt_len)
+            type = "SNP" if indel_num <= 50 else "SV"
+            snps.append({"confidence":confidence, "pos":pos, "ref":ref, "alt":alt, "af": af, "qd":qd, "fs":fs, "mq":mq, "type":type})
+    # 检查SNP上下游是否为polyA和polyT
+    for i, site in enumerate(snps):
         pos = site["pos"]
-        up_stream = (pos - 10, pos)
-        dow_stream = (pos, pos + 10)
-        ref_seq[up_stream[0]:up_stream[1]]
-    
+        up_stream_pos = (pos - 5, pos)
+        down_stream_pos = (pos, pos + 5)
+        up_stream_seq = ref_seq[up_stream_pos[0]:up_stream_pos[1]]
+        down_stream_seq = ref_seq[down_stream_pos[0]:down_stream_pos[1]]
+        if is_low_complexity(up_stream_seq) or is_low_complexity(down_stream_seq):
+            snps[i]["confidence"] = 0
     return snps    
     
     
@@ -205,35 +218,25 @@ def process_mutation(ref_seq: str, fq_path: str, output_dir: str) -> dict:
     return variant_li
     
 
-def annotate_mutation_to_gbk(gbk_file: str, vcf_file: str, output_file: str) -> None:
+def annotate_mutation_to_gbk(gbk_file: str, snp_li: list, output_file: str) -> None:
     # 读取 gbk 文件
     record = SeqIO.read(gbk_file, "genbank")
-
-    # 读取 VCF 文件中 SNP 位点（忽略 header）
-    snps = []
-    with open(vcf_file) as vcf:
-        for line in vcf:
-            if line.startswith("#"):
-                continue
-            parts = line.strip().split("\t")
-            pos = int(parts[1]) - 1  # VCF 是1-based，Biopython是0-based
-            ref = parts[3]
-            alt = parts[4]
-            snps.append((pos, ref, alt))
-
     # 添加 feature 注释
-    for pos, ref, alt in snps:
+    for snp in snp_li:
+        pos = snp["pos"]
+        ref = snp["ref"]
+        alt = snp["alt"]
+        confidence = snp["confidence"]
         feature = SeqFeature(
             location=FeatureLocation(pos, pos + 1),
             type="variation",
             qualifiers={
-                "note": [f"SNP: {ref}>{alt}"],
+                "note": [f"SNP: {ref}>{alt}({confidence} confidence)"],
                 "ref": ref,
                 "alt": alt
             }
         )
         record.features.append(feature)
-
     # 写出新的 gbk 文件
     with open(output_file, "w") as out_handle:
         SeqIO.write(record, out_handle, "genbank")
@@ -275,7 +278,7 @@ def main() -> None:
     map_info_dict = obtain_map_result(ref_len, f"{output_dir}/aln.bam",f"{output_dir}/depth_per_base.png")
     variant_li = process_mutation(ref_seq, input_fq_file,output_dir)
     annotated_gbk = output_dir + Path(gbk_file).name.replace(".gbk","_annotated.gbk")
-    annotate_mutation_to_gbk(gbk_file,f"{output_dir}/medaka.annotated.vcf",annotated_gbk)
+    annotate_mutation_to_gbk(gbk_file,variant_li,annotated_gbk)
     report_generate(qc_info_dict, map_info_dict, variant_li, output_dir)
     
     
