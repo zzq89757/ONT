@@ -160,7 +160,7 @@ def mutation_classify(output_vcf: str,ref_seq: str) -> list:
     # 读取 VCF 文件中 SNP 位点（忽略 header）
     snps = []
     with VariantFile(output_vcf) as vcf:
-        confidence = 1
+        confidence = "High"
         for rec in vcf.fetch():
             chrom = rec.chrom
             pos = rec.pos
@@ -172,7 +172,7 @@ def mutation_classify(output_vcf: str,ref_seq: str) -> list:
             af = rec.info.get('AF', '.')
             # (QD < 2.0 || FS > 60.0 || MQ < 40.0)?
             if qd < 2 or fs > 60 or mq < 40:
-                confidence = 0
+                confidence = "Low"
             # type:SNP/SV
             max_alt_len = max([len(a) for a in rec.alts])
             indel_num = abs(len(ref) - max_alt_len)
@@ -186,7 +186,7 @@ def mutation_classify(output_vcf: str,ref_seq: str) -> list:
         up_stream_seq = ref_seq[up_stream_pos[0]:up_stream_pos[1]]
         down_stream_seq = ref_seq[down_stream_pos[0]:down_stream_pos[1]]
         if is_low_complexity(up_stream_seq) or is_low_complexity(down_stream_seq):
-            snps[i]["confidence"] = 0
+            snps[i]["confidence"] = "Low"
     return snps    
     
     
@@ -227,7 +227,7 @@ def annotate_mutation_to_gbk(gbk_file: str, snp_li: list, output_file: str) -> N
             location=FeatureLocation(pos, pos + 1),
             type="variation",
             qualifiers={
-                "note": [f"{type}: {ref}>{alt}({"high" if confidence else "low"} confidence)"],
+                "note": [f"{type}: {ref}>{alt}({confidence} Confidence)"],
                 "ref": ref,
                 "alt": alt
             }
