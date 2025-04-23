@@ -150,15 +150,10 @@ def obtain_map_result(ref_len: int, bam_path: str, out_png: str) -> dict:
     return map_info_dict
 
 
-def extract_vcf_info(cvf_path: str) -> list:
-    ...
-
-
 def is_low_complexity(seq: str) -> int:
     # 切2-mer 统计种类
     kmers = [seq[i:i+2] for i in range(len(seq) - 2 + 1)]
-    return len(set(kmers)) < 3
-        
+    return len(set(kmers)) < 3      
 
 
 def mutation_classify(output_vcf: str,ref_seq: str) -> list:
@@ -182,7 +177,7 @@ def mutation_classify(output_vcf: str,ref_seq: str) -> list:
             max_alt_len = max([len(a) for a in rec.alts])
             indel_num = abs(len(ref) - max_alt_len)
             type = "SNP" if indel_num <= 50 else "SV"
-            snps.append({"confidence":confidence, "pos":pos, "ref":ref, "alt":alt, "af": af, "qd":qd, "fs":fs, "mq":mq, "type":type})
+            snps.append({"confidence":confidence, "pos":pos, "ref":ref, "alt":alt, "af": af, "type":type})
     # 检查SNP上下游是否为polyA和polyT
     for i, site in enumerate(snps):
         pos = site["pos"]
@@ -226,12 +221,13 @@ def annotate_mutation_to_gbk(gbk_file: str, snp_li: list, output_file: str) -> N
         pos = snp["pos"]
         ref = snp["ref"]
         alt = snp["alt"]
+        type = snp["type"]
         confidence = snp["confidence"]
         feature = SeqFeature(
             location=FeatureLocation(pos, pos + 1),
             type="variation",
             qualifiers={
-                "note": [f"SNP: {ref}>{alt}({confidence} confidence)"],
+                "note": [f"{type}: {ref}>{alt}({"high" if confidence else "low"} confidence)"],
                 "ref": ref,
                 "alt": alt
             }
@@ -268,13 +264,25 @@ def report_generate(qc_info_dict: dict, map_info_dict: dict, variant_li: list, o
     
 
 def main() -> None:
+    # user input message
+    sample_id = "C2931XKUG0-1"
+    clone_id = "-"
+    order = "-"
+    proposal = "-"
+    proposal_name = "-"
+    # input file
     gbk_file = "../painted_fq/C2931XKUG0-1_c-ps232691-1_vars_pLann.gbk"
     input_fq_file = "../painted_fq/C2931XKUG0-1_c-ps232691-1.fastq"
+    # output dir
     output_dir = "./test/"
+    # QC and record info and plot plot_read_length_distribution png
     qc_info_dict = quality_check(input_fq_file, output_dir)
+    # extract info and seq from gbk
     ref_seq = reference_info_from_gbk(gbk_file, output_dir)
     ref_len = len(ref_seq)
+    # map to referrence by minimap2
     map2reference(output_dir)
+    # extract map info from bam file and plot depth per base png
     map_info_dict = obtain_map_result(ref_len, f"{output_dir}/aln.bam",f"{output_dir}/depth_per_base.png")
     variant_li = process_mutation(ref_seq, input_fq_file,output_dir)
     annotated_gbk = output_dir + Path(gbk_file).name.replace(".gbk","_annotated.gbk")
