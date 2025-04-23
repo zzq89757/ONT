@@ -5,5 +5,9 @@
 *.html
 *.gbk
 *.*am*
-*.fa
 *png
+*pyc
+*fasta*
+*fa*
+*hdf
+*vcf

@@ -3,7 +3,7 @@ from pathlib import Path
 from Bio import SeqIO
 from Bio.SeqFeature import SeqFeature, FeatureLocation
 import numpy as np
-from pysam import index, depth, flagstat, FastqFile
+from pysam import index, depth, flagstat, FastqFile, VariantFile
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -20,10 +20,10 @@ def plot_read_length_distribution(fq_path: str, out_png: str):
     fq.close()
     # 画图
     x_lim = max(read_lengths) // 2000 * 2000 + 2000
-    print(x_lim)
+    # print(x_lim)
     sns.set_theme(style="darkgrid")
     plt.figure(figsize=(20, 6))
-    sns.histplot(read_lengths, bins=100, color="mediumseagreen")
+    sns.histplot(read_lengths, bins=100, color="darkcyan")
     plt.title("Reads Length Distribution")
     plt.xlabel("Read Length")
     # plt.xlim(0, x_lim)
@@ -48,18 +48,22 @@ def quality_check(fq_path: str, output_data_path: str) -> dict:
     if not Path(qc_res_path).exists():
         Path(qc_res_path).mkdir(exist_ok=1,parents=1)
     # 过滤接头
-    porechop_cmd = f"porechop -i {fq_path} -o {output_data_path}/adapter_trimmed.fq --threads 24 \
+    porechop_cmd = f"/mnt/ntc_data/wayne/Software/miniconda3/envs/NTC/bin/porechop -i {fq_path} -o {output_data_path}/adapter_trimmed.fq --threads 24 \
          --adapter_threshold 85 --discard_middle"
     # 运行NanoFilt 过滤长度低于阈值以及低质量数据
-    nanofilt_cmd = f"NanoFilt -q 10 -l 500 {output_data_path}/adapter_trimmed.fq > {output_data_path}/clean_reads.fq"
+    nanofilt_cmd = f"/mnt/ntc_data/wayne/Software/miniconda3/envs/NTC/bin/NanoFilt -q 10 -l 500 {output_data_path}/adapter_trimmed.fq > {output_data_path}/clean_reads.fq"
     # 运行Nanoplot 生成qc报告
-    nanoplot_cmd = f"NanoPlot -t 24 --fastq {output_data_path}/clean_reads.fq -o {qc_res_path} \
-        --tsv_stats"
-    # system(porechop_cmd)
-    # system(nanofilt_cmd)
-    # system(nanoplot_cmd)
+    nanoplot_cmd = f"/mnt/ntc_data/wayne/Software/miniconda3/envs/NTC/bin/NanoPlot -t 24 --fastq {output_data_path}/clean_reads.fq -o {qc_res_path} \
+        --tsv_stats --no_static"
+    if not Path(f"{output_data_path}/adapter_trimmed.fq").exists():
+        system(porechop_cmd)
+    if not Path(f"{output_data_path}/clean_reads.fq").exists():
+        system(nanofilt_cmd)
+    if not Path(f"{qc_res_path}/NanoStats.txt").exists():
+        system(nanoplot_cmd)
     # 绘制read len 分布图
-    # plot_read_length_distribution(f"{output_data_path}/clean_reads.fq",f"{output_data_path}/read_length_distribution.png")
+    if not Path(f"{output_data_path}/read_length_distribution.png").exists():
+        plot_read_length_distribution(f"{output_data_path}/clean_reads.fq",f"{output_data_path}/read_length_distribution.png")
     # 提取qc 信息
     return extract_qc_info(qc_res_path)
      
@@ -68,27 +72,28 @@ def reference_info_from_gbk(gbk_file: str, output_data_path: str) -> int:
     # 根据gbk生成fa和储存位置信息的字典
     output_fa = f"{output_data_path}/ref.fa"
     fa_handle=open(output_fa,'w')
-    ref_len = 0
+    ref_seq = ''
     # 读取 GenBank 文件中的记录
     for record in SeqIO.parse(gbk_file, "genbank"):
         # 写入fa文件
         print(f">vector",file=fa_handle)
         print(record.seq,file=fa_handle)
-        ref_len = len(record.seq)
-    return ref_len
+        ref_seq = str(record.seq).upper()
+    return ref_seq
 
 
 def map2reference(output_data_path: str) -> None:
     # 运行minimap2
     aln_cmd_str = f"minimap2 -x map-ont -a -t 24 {output_data_path}/ref.fa {output_data_path}/clean_reads.fq | samtools sort -@ 24 -O BAM - > {output_data_path}/aln.bam"
-    system(aln_cmd_str)
+    if not Path(f"{output_data_path}/aln.bam").exists():
+        system(aln_cmd_str)
 
 
 def plot_depth_per_base(x:list, depths: list, output_png: str) -> None:
     sns.set_theme(style="darkgrid")
     plt.figure(figsize=(16, 5))  # 宽高设置
-    plt.plot(x, depths, color="dimgrey", linewidth=0.6)
-    plt.fill_between(x, depths, color="dimgrey")
+    plt.plot(x, depths, color="darkcyan", linewidth=0.6)
+    plt.fill_between(x, depths, color="darkcyan")
 
     plt.xlabel("POS", fontsize=12)
     plt.ylabel("Depth", fontsize=12)
@@ -122,7 +127,8 @@ def obtain_map_result(ref_len: int, bam_path: str, out_png: str) -> dict:
     pos_li = depths[1].to_numpy()
     dep_li = depths[2].to_numpy()
     # 画图
-    plot_depth_per_base(pos_li, dep_li, out_png)
+    if not Path(out_png).exists():
+        plot_depth_per_base(pos_li, dep_li, out_png)
     # 计算Avg depth, Median depth,Coverage, Cov 30x, Cov 100x
     avg_depth = int(np.mean(dep_li))
     median_depth = int(np.median(dep_li))
@@ -144,24 +150,59 @@ def obtain_map_result(ref_len: int, bam_path: str, out_png: str) -> dict:
     return map_info_dict
 
 
-def mutation_classify(output_vcf: str, snp_info_dict: dict) -> None:
+def extract_vcf_info(cvf_path: str) -> list:
     ...
- 
+
+
+def mutation_classify(output_vcf: str,ref_seq: str) -> list:
+    # 读取 VCF 文件中 SNP 位点（忽略 header）
+    snps = []
+    with VariantFile(output_vcf) as vcf:
+        confidence = 1
+        for rec in vcf.fetch():
+            chrom = rec.chrom
+            pos = rec.pos
+            ref = rec.ref
+            alt = ','.join(str(a) for a in rec.alts)
+            qd = rec.info.get('QD', '.')
+            fs = rec.info.get('FS', '.')
+            mq = rec.info.get('MQ', '.')
+            # (QD < 2.0 || FS > 60.0 || MQ < 40.0)?
+            if qd < 2 or fs > 60 or mq < 40:
+                confidence = 0
+            snps.append({"pos":pos, "ref":ref, "alt":alt, "qd":qd, "fs":fs, "mq":mq, "confidence":confidence})
+    # 检查SNP上下游是否为polyA和polyT 
+    print(ref_seq[100:200])
+    for site in snps:
+        pos = site["pos"]
+        up_stream = (pos - 10, pos)
+        dow_stream = (pos, pos + 10)
+        ref_seq[up_stream[0]:up_stream[1]]
     
-def process_mutation(output_dir: str) -> dict:
-    snp_info_dict = {}
+    return snps    
+    
+    
+def process_mutation(ref_seq: str, fq_path: str, output_dir: str) -> dict:
+    variant_li = []
     # 使用medaka call SNP
-    output_vcf = f"{output_dir}/var.vcf"
-    snp_call_cmd = f"medaka_variant \
-        -i {output_dir}/aln.bam \
-        -f {output_dir}/ref.fa \
+    output_vcf = f"{output_dir}/medaka.annotated.vcf"
+    concensus_cmd = f"medaka_consensus \
+        -i {fq_path} \
+        -d {output_dir}/ref.fa \
         -m r941_min_sup_g507 \
-        -o {output_dir} "
+        -o {output_dir} -t 24"
     
-    system(snp_call_cmd)
+    variant_cmd = f"medaka_haploid_variant \
+        -i {fq_path} \
+        -r {output_dir}/ref.fa \
+        -o {output_dir} -t 24"
+    if not Path(f"{output_dir}/consensus.fasta").exists():
+        system(concensus_cmd)
+    if not Path(f"{output_dir}/medaka.vcf").exists():
+        system(variant_cmd)
     # 将mutation分类至high confidence 和 low confidence并存入字典
-    mutation_classify(output_vcf,snp_info_dict)
-    return snp_info_dict
+    variant_li = mutation_classify(output_vcf,ref_seq)
+    return variant_li
     
 
 def annotate_mutation_to_gbk(gbk_file: str, vcf_file: str, output_file: str) -> None:
@@ -205,14 +246,16 @@ def image_insert(doc: DocxTemplate, data_dict: dict, output_dir: str) -> None:
     data_dict['image2'] = InlineImage(doc,depth_distribution_image_path)
   
 
-def report_generate(qc_info_dict: dict, map_info_dict: dict, snp_info_dict: dict, output_dir: str) -> None:
+def report_generate(qc_info_dict: dict, map_info_dict: dict, variant_li: list, output_dir: str) -> None:
     # 将qc map snp 信息存入同一字典
     data_dict = {}
     data_dict.update(qc_info_dict)
     data_dict.update(map_info_dict)
-    data_dict.update(snp_info_dict)
+    data_dict["snp_list"] = [] if not variant_li else [x for x in variant_li if x["type"]=="SNP"]
+    data_dict["sv_list"] = [] if not variant_li else [x for x in variant_li if x["type"]=="SV"]
+    print(data_dict)
     # 读取模版
-    doc = DocxTemplate(r".\Nanopore_result template.docx")
+    doc = DocxTemplate(r"./Nanopore_result template.docx")
     # 插入图片
     image_insert(doc,data_dict,output_dir)
     # 渲染报告并转PDF
@@ -226,13 +269,14 @@ def main() -> None:
     input_fq_file = "../painted_fq/C2931XKUG0-1_c-ps232691-1.fastq"
     output_dir = "./test/"
     qc_info_dict = quality_check(input_fq_file, output_dir)
-    ref_len = reference_info_from_gbk(gbk_file, output_dir)
-    # map2reference(output_dir)
+    ref_seq = reference_info_from_gbk(gbk_file, output_dir)
+    ref_len = len(ref_seq)
+    map2reference(output_dir)
     map_info_dict = obtain_map_result(ref_len, f"{output_dir}/aln.bam",f"{output_dir}/depth_per_base.png")
-    snp_info_dict = process_mutation(output_dir)
-    annotated_gbk = gbk_file.replace(".gbk","_annotated.gbk")
-    annotate_mutation_to_gbk(gbk_file,f"{output_dir}/var.vcf",annotated_gbk)
-    report_generate(qc_info_dict, map_info_dict, snp_info_dict, output_dir)
+    variant_li = process_mutation(ref_seq, input_fq_file,output_dir)
+    annotated_gbk = output_dir + Path(gbk_file).name.replace(".gbk","_annotated.gbk")
+    annotate_mutation_to_gbk(gbk_file,f"{output_dir}/medaka.annotated.vcf",annotated_gbk)
+    report_generate(qc_info_dict, map_info_dict, variant_li, output_dir)
     
     
 if __name__ == "__main__":
