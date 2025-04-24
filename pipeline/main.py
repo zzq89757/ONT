@@ -9,7 +9,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import re
-from docx2pdf import convert
 from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Mm
 import subprocess
@@ -159,36 +158,48 @@ def get_basecall_model_version_id(fq_path: str) -> str:
             if line.startswith('@') and 'basecall_model_version_id=' in line:
                 for field in line.strip().split():
                     if field.startswith('basecall_model_version_id='):
-                        return field.split('=')[1]
+                        model_str = field.split('=')[1].replace(".","").replace("@v","_g")
+                        medaka_model_formmat = model_str.split("_",1)[1]
+                        return medaka_model_formmat
             break  # 只检查第一条 read 的注释信息
     return "Not found"
 
 
-def get_medaka_model(fq_path: str) -> str:
+def get_medaka_model(fq_path: str) -> list:
     # 读取fq 获取basecall_model_version_id
     basecall_model_version_id = get_basecall_model_version_id(fq_path)
-    # 建议维护一个映射字典
-    model_map = {
-        "r10.4.1_e8.2_400bps_sup": "r1041_e82_400bps_sup_variant_g632",
-        "r10.4.1_e8.2_400bps_hac": "r1041_e82_400bps_hac_variant_g632",
-        "r10.4.1_e8.2_400bps_fast": "r1041_e82_400bps_fast_variant_g632",
-        "r10.4.1_e8.2_260bps_sup": "r1041_e82_260bps_sup_variant_g632",
-        "r10.4_e81_sup": "r104_e81_sup_variant_g610",
-        "r9.4.1_e8_sup": "r941_e81_sup_variant_g514",
-        "r9.4.1_e8_hac": "r941_e81_hac_variant_g514",
-        "r9.4.1_e8_fast": "r941_e81_fast_variant_g514",
-    }
+    medaka_model_li = [
+        "r103_fast_g507", "r103_fast_snp_g507", "r103_fast_variant_g507", "r103_hac_g507", "r103_hac_snp_g507", "r103_hac_variant_g507", "r103_min_high_g345", "r103_min_high_g360", "r103_prom_high_g360", "r103_prom_snp_g3210", "r103_prom_variant_g3210", "r103_sup_g507", "r103_sup_snp_g507", "r103_sup_variant_g507", "r1041_e82_260bps_fast_g632", "r1041_e82_260bps_fast_variant_g632", "r1041_e82_260bps_hac_g632", "r1041_e82_260bps_hac_variant_g632", "r1041_e82_260bps_sup_g632", "r1041_e82_260bps_sup_variant_g632", "r1041_e82_400bps_fast_g615", "r1041_e82_400bps_fast_g632", "r1041_e82_400bps_fast_variant_g615", "r1041_e82_400bps_fast_variant_g632", "r1041_e82_400bps_hac_g615", "r1041_e82_400bps_hac_g632", "r1041_e82_400bps_hac_variant_g615", "r1041_e82_400bps_hac_variant_g632", "r1041_e82_400bps_sup_g615", "r1041_e82_400bps_sup_variant_g615", "r104_e81_fast_g5015", "r104_e81_fast_variant_g5015", "r104_e81_hac_g5015", "r104_e81_hac_variant_g5015", "r104_e81_sup_g5015", "r104_e81_sup_g610", "r104_e81_sup_variant_g610", "r10_min_high_g303", "r10_min_high_g340", "r941_e81_fast_g514", "r941_e81_fast_variant_g514", "r941_e81_hac_g514", "r941_e81_hac_variant_g514", "r941_e81_sup_g514", "r941_e81_sup_variant_g514", "r941_min_fast_g303", "r941_min_fast_g507", "r941_min_fast_snp_g507", "r941_min_fast_variant_g507", "r941_min_hac_g507", "r941_min_hac_snp_g507", "r941_min_hac_variant_g507", "r941_min_high_g303", "r941_min_high_g330", "r941_min_high_g340_rle", "r941_min_high_g344", "r941_min_high_g351", "r941_min_high_g360", "r941_min_sup_g507", "r941_min_sup_snp_g507", "r941_min_sup_variant_g507", "r941_prom_fast_g303", "r941_prom_fast_g507", "r941_prom_fast_snp_g507", "r941_prom_fast_variant_g507", "r941_prom_hac_g507", "r941_prom_hac_snp_g507", "r941_prom_hac_variant_g507", "r941_prom_high_g303", "r941_prom_high_g330", "r941_prom_high_g344", "r941_prom_high_g360", "r941_prom_high_g4011", "r941_prom_snp_g303", "r941_prom_snp_g322", "r941_prom_snp_g360", "r941_prom_sup_g507", "r941_prom_sup_snp_g507", "r941_prom_sup_variant_g507", "r941_prom_variant_g303", "r941_prom_variant_g322", "r941_prom_variant_g360", "r941_sup_plant_g610", "r941_sup_plant_variant_g610"
+    ]
+    # 根据basecall_model_version_id选择medaka模型版本（guppy版本只能低于medaka）
 
-    # 统一处理，只取前缀部分
-    base_model = basecall_model_version_id.split("@")[0]
-    base_model = base_model.replace("dna_", "")
-
-    # 模糊匹配
-    for key in model_map:
-        if base_model.startswith(key):
-            return model_map[key]
-
-    return ""
+    # 提取basecall_model_version_id guppy前面的部分
+    bc_guppy_version = int(basecall_model_version_id.split("_g",)[-1])
+    basecall_model_version_id_prefix = basecall_model_version_id.replace(f"_g{bc_guppy_version}","")
+    # 去medaka model li 寻找前缀相同 guppy版本低于basecall_model_version_id guppy的模型
+    prefix_catch_li = [x for x in medaka_model_li if x.startswith(basecall_model_version_id_prefix)]
+    # 若无结果 直接退出
+    if not prefix_catch_li:
+        exit("No medaka model found,check you data,exit!!!")
+    # 若只有一个结果 直接采用
+    if len(prefix_catch_li) == 1:
+        medaka_model = prefix_catch_li[1]
+        medaka_var_model = medaka_model.replace("_g","_variant_g")
+        return [medaka_model, medaka_var_model]
+    # 若多个结果 寻找前缀相同 guppy版本低于basecall_model_version_id guppy的模型
+    min_medaka_model = ""
+    min_medaka_var_model = ""
+    min_medaka_guppy_version = 10000
+    for medaka_model in prefix_catch_li:
+        medaka_var_model = medaka_model.replace("_g","_variant_g")
+        medaka_guppy_version = int(medaka_model.split("_g")[1])
+        if medaka_guppy_version == bc_guppy_version:
+            return [medaka_model, medaka_var_model]
+        if medaka_guppy_version < min_medaka_guppy_version:
+            min_medaka_guppy_version = medaka_guppy_version
+            min_medaka_model = medaka_model
+            min_medaka_var_model = medaka_var_model
+    return [min_medaka_model, min_medaka_var_model]
 
 
 
@@ -258,18 +269,21 @@ def mutation_classify(output_vcf: str,ref_seq: str) -> list:
 def process_mutation(ref_seq: str, output_dir: str) -> dict:
     variant_li = []
     fq_path = f"{output_dir}/clean_reads.fq"
-    model = get_medaka_model(fq_path)
+    model, var_model = get_medaka_model(fq_path)
+    print(f"Use model:{model},{var_model}")
     # 使用medaka call SNP
     output_vcf = f"{output_dir}/medaka.annotated.vcf"
     concensus_cmd = f"medaka_consensus \
         -i {fq_path} \
         -d {output_dir}/ref.fa \
-        -o {output_dir} -t 24"
+        -o {output_dir} -t 24 \
+        -m {model}"
     
     variant_cmd = f"medaka_haploid_variant \
         -i {fq_path} \
         -r {output_dir}/ref.fa \
-        -o {output_dir} -t 24"
+        -o {output_dir} -t 24 \
+        -m {var_model}"
     if not Path(f"{output_dir}/consensus.fasta").exists():
         system(concensus_cmd)
     if not Path(f"{output_dir}/medaka.vcf").exists():
