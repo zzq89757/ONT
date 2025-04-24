@@ -1,5 +1,6 @@
 from os import system
 from pathlib import Path
+import time
 from Bio import SeqIO
 from Bio.SeqFeature import SeqFeature, FeatureLocation
 import numpy as np
@@ -10,6 +11,8 @@ import seaborn as sns
 import re
 from docx2pdf import convert
 from docxtpl import DocxTemplate, InlineImage
+from docx.shared import Mm
+import subprocess
 
 
 def plot_read_length_distribution(fq_path: str, out_png: str):
@@ -48,12 +51,12 @@ def quality_check(fq_path: str, output_data_path: str) -> dict:
     if not Path(qc_res_path).exists():
         Path(qc_res_path).mkdir(exist_ok=1,parents=1)
     # 过滤接头
-    porechop_cmd = f"/mnt/ntc_data/wayne/Software/miniconda3/envs/NTC/bin/porechop -i {fq_path} -o {output_data_path}/adapter_trimmed.fq --threads 24 \
+    porechop_cmd = f"porechop -i {fq_path} -o {output_data_path}/adapter_trimmed.fq --threads 24 \
          --adapter_threshold 85 --discard_middle"
     # 运行NanoFilt 过滤长度低于阈值以及低质量数据
-    nanofilt_cmd = f"/mnt/ntc_data/wayne/Software/miniconda3/envs/NTC/bin/NanoFilt -q 10 -l 500 {output_data_path}/adapter_trimmed.fq > {output_data_path}/clean_reads.fq"
+    nanofilt_cmd = f"NanoFilt -q 10 -l 500 {output_data_path}/adapter_trimmed.fq > {output_data_path}/clean_reads.fq"
     # 运行Nanoplot 生成qc报告
-    nanoplot_cmd = f"/mnt/ntc_data/wayne/Software/miniconda3/envs/NTC/bin/NanoPlot -t 24 --fastq {output_data_path}/clean_reads.fq -o {qc_res_path} \
+    nanoplot_cmd = f"NanoPlot -t 24 --fastq {output_data_path}/clean_reads.fq -o {qc_res_path} \
         --tsv_stats --no_static"
     if not Path(f"{output_data_path}/adapter_trimmed.fq").exists():
         system(porechop_cmd)
@@ -150,6 +153,45 @@ def obtain_map_result(ref_len: int, bam_path: str, out_png: str) -> dict:
     return map_info_dict
 
 
+def get_basecall_model_version_id(fq_path: str) -> str:
+    with open(fq_path, 'r') as fq:
+        for line in fq:
+            if line.startswith('@') and 'basecall_model_version_id=' in line:
+                for field in line.strip().split():
+                    if field.startswith('basecall_model_version_id='):
+                        return field.split('=')[1]
+            break  # 只检查第一条 read 的注释信息
+    return "Not found"
+
+
+def get_medaka_model(fq_path: str) -> str:
+    # 读取fq 获取basecall_model_version_id
+    basecall_model_version_id = get_basecall_model_version_id(fq_path)
+    # 建议维护一个映射字典
+    model_map = {
+        "r10.4.1_e8.2_400bps_sup": "r1041_e82_400bps_sup_variant_g632",
+        "r10.4.1_e8.2_400bps_hac": "r1041_e82_400bps_hac_variant_g632",
+        "r10.4.1_e8.2_400bps_fast": "r1041_e82_400bps_fast_variant_g632",
+        "r10.4.1_e8.2_260bps_sup": "r1041_e82_260bps_sup_variant_g632",
+        "r10.4_e81_sup": "r104_e81_sup_variant_g610",
+        "r9.4.1_e8_sup": "r941_e81_sup_variant_g514",
+        "r9.4.1_e8_hac": "r941_e81_hac_variant_g514",
+        "r9.4.1_e8_fast": "r941_e81_fast_variant_g514",
+    }
+
+    # 统一处理，只取前缀部分
+    base_model = basecall_model_version_id.split("@")[0]
+    base_model = base_model.replace("dna_", "")
+
+    # 模糊匹配
+    for key in model_map:
+        if base_model.startswith(key):
+            return model_map[key]
+
+    return ""
+
+
+
 def is_low_complexity(seq: str) -> int:
     # 切2-mer 统计种类
     kmers = [seq[i:i+2] for i in range(len(seq) - 2 + 1)]
@@ -166,18 +208,41 @@ def mutation_classify(output_vcf: str,ref_seq: str) -> list:
             pos = rec.pos
             ref = rec.ref
             alt = ','.join(str(a) for a in rec.alts)
-            qd = rec.info.get('QD', '.')
-            fs = rec.info.get('FS', '.')
-            mq = rec.info.get('MQ', '.')
-            af = rec.info.get('AF', '.')
+            # qd = rec.info.get('QD', '.')
+            # fs = rec.info.get('FS', '.')
+            # mq = rec.info.get('MQ', '.')
+            # af = rec.info.get('AF', '.')
+            ref_dp, alt_dp = rec.info['DPS']
+            # af = rec.info.get('AF', '.')
+            total = ref_dp + alt_dp
+            af = alt_dp / total if total > 0 else 0
+            # QUAL 过滤
+            if rec.qual is not None and rec.qual < 2:
+                continue
+
+            # DP 过滤
+            dp = rec.info.get("DP")
+            if dp is None or dp < 1000:
+                continue
+
+            # GQ 过滤（从 FORMAT 字段的 SAMPLE 里取）
+            sample = rec.samples[0]  # 假设只有一个样本
+            gq = sample.get("GQ")
+            if gq is None or gq < 3:
+                continue
             # (QD < 2.0 || FS > 60.0 || MQ < 40.0)?
-            if qd < 2 or fs > 60 or mq < 40:
-                confidence = "Low"
+            # if qd < 2 or fs > 60 or mq < 40:
+            #     confidence = "Low"
             # type:SNP/SV
             max_alt_len = max([len(a) for a in rec.alts])
             indel_num = abs(len(ref) - max_alt_len)
             type = "SNP" if indel_num <= 50 else "SV"
-            snps.append({"confidence":confidence, "pos":pos, "ref":ref, "alt":alt, "af": af, "type":type})
+            if type == "SNP":
+                snps.append({"confidence":confidence, "pos":pos, "ref":ref, "alt":alt, "af": af, "type":type})
+            else:
+                sv_type = "Duplication" if len(ref) < max_alt_len else "Deletion"
+                snps.append({"confidence":confidence, "pos":pos,  "sv_type":sv_type, "sv_len":max_alt_len, "af": af, "type":type,})
+                
     # 检查SNP上下游是否为polyA和polyT
     for i, site in enumerate(snps):
         pos = site["pos"]
@@ -190,14 +255,15 @@ def mutation_classify(output_vcf: str,ref_seq: str) -> list:
     return snps    
     
     
-def process_mutation(ref_seq: str, fq_path: str, output_dir: str) -> dict:
+def process_mutation(ref_seq: str, output_dir: str) -> dict:
     variant_li = []
+    fq_path = f"{output_dir}/clean_reads.fq"
+    model = get_medaka_model(fq_path)
     # 使用medaka call SNP
     output_vcf = f"{output_dir}/medaka.annotated.vcf"
     concensus_cmd = f"medaka_consensus \
         -i {fq_path} \
         -d {output_dir}/ref.fa \
-        -m r941_min_sup_g507 \
         -o {output_dir} -t 24"
     
     variant_cmd = f"medaka_haploid_variant \
@@ -222,12 +288,13 @@ def annotate_mutation_to_gbk(gbk_file: str, snp_li: list, output_file: str) -> N
         ref = snp["ref"]
         alt = snp["alt"]
         type = snp["type"]
+        af = snp["af"]
         confidence = snp["confidence"]
         feature = SeqFeature(
             location=FeatureLocation(pos, pos + 1),
             type="variation",
             qualifiers={
-                "note": [f"{type}: {ref}>{alt}({confidence} Confidence)"],
+                "note": [f"{type}: {ref}>{alt},AF:{af}({confidence} Confidence)"],
                 "ref": ref,
                 "alt": alt
             }
@@ -241,40 +308,60 @@ def annotate_mutation_to_gbk(gbk_file: str, snp_li: list, output_file: str) -> N
 def image_insert(doc: DocxTemplate, data_dict: dict, output_dir: str) -> None:
     read_len_distribution_image_path = f"{output_dir}/read_length_distribution.png"
     depth_distribution_image_path = f"{output_dir}/depth_per_base.png"
-    data_dict['image1'] = InlineImage(doc,read_len_distribution_image_path)
-    data_dict['image2'] = InlineImage(doc,depth_distribution_image_path)
-  
+    data_dict['image1'] = InlineImage(doc,read_len_distribution_image_path, width=Mm(170))
+    data_dict['image2'] = InlineImage(doc,depth_distribution_image_path, width=Mm(170))
+
+
+def convert_to_pdf(docx_path: str, output_dir: str = "."):
+    subprocess.run([
+        "libreoffice", "--headless", "--convert-to", "pdf", "--outdir",
+        output_dir, docx_path
+    ])
+
+
 
 def report_generate(qc_info_dict: dict, map_info_dict: dict, variant_li: list, output_dir: str) -> None:
-    # 将qc map snp 信息存入同一字典
     data_dict = {}
+    # user input message
+    sample_id = "C1413CJPG0-1"
+    clone_id = "-"
+    order = "-"
+    proposal = "-"
+    proposal_name = "-"
+    data_dict["sample_id"] = sample_id
+    data_dict["clone_id"] = clone_id
+    data_dict["order"] = order
+    data_dict["proposal"] = proposal
+    data_dict["proposal_name"] = proposal_name
+    # 将qc map snp 信息存入同一字典
     data_dict.update(qc_info_dict)
     data_dict.update(map_info_dict)
+    data_dict["QC"] = "PASS" if float(qc_info_dict["median_qual"]) > 15 else "FAILED"
+    data_dict["Mapping"] = "PASS" if float(map_info_dict["map_ratio"].replace("%","")) > 95 and float(map_info_dict["coverage"].replace("%","")) > 95 else "FAILED"
     data_dict["snp_list"] = [] if not variant_li else [x for x in variant_li if x["type"]=="SNP"]
+    data_dict["mutation_count"] = len(data_dict["snp_list"])
     data_dict["sv_list"] = [] if not variant_li else [x for x in variant_li if x["type"]=="SV"]
+    data_dict["sv_count"] = len(data_dict["sv_list"])
     print(data_dict)
     # 读取模版
-    doc = DocxTemplate(r"./Nanopore_result template.docx")
+    doc = DocxTemplate(r"./nanopore sequencing report-vb.docx")
     # 插入图片
     image_insert(doc,data_dict,output_dir)
     # 渲染报告并转PDF
     doc.render(data_dict)
     doc.save(f"{output_dir}/report.docx")
-    convert(f"{output_dir}/report.docx")
+    # convert(f"{output_dir}/report.docx")
+    output_pdf = f"{output_dir}/report.pdf"
+    convert_to_pdf(f"{output_dir}/report.docx",output_dir)
     
 
 def main() -> None:
-    # user input message
-    sample_id = "C2931XKUG0-1"
-    clone_id = "-"
-    order = "-"
-    proposal = "-"
-    proposal_name = "-"
+    t1 = time.time()
     # input file
-    gbk_file = "../painted_fq/C2931XKUG0-1_c-ps232691-1_vars_pLann.gbk"
-    input_fq_file = "../painted_fq/C2931XKUG0-1_c-ps232691-1.fastq"
+    gbk_file = "../painted_fq/C1413CJPG0-1_1220-01-A07-B08.gbk"
+    input_fq_file = "../painted_fq/C1413CJPG0-1_1220-01-A07-B08.fastq.gz"
     # output dir
-    output_dir = "./test/"
+    output_dir = "./test_1/"
     # QC and record info and plot plot_read_length_distribution png
     qc_info_dict = quality_check(input_fq_file, output_dir)
     # extract info and seq from gbk
@@ -284,10 +371,11 @@ def main() -> None:
     map2reference(output_dir)
     # extract map info from bam file and plot depth per base png
     map_info_dict = obtain_map_result(ref_len, f"{output_dir}/aln.bam",f"{output_dir}/depth_per_base.png")
-    variant_li = process_mutation(ref_seq, input_fq_file,output_dir)
+    variant_li = process_mutation(ref_seq,output_dir)
     annotated_gbk = output_dir + Path(gbk_file).name.replace(".gbk","_annotated.gbk")
     annotate_mutation_to_gbk(gbk_file,variant_li,annotated_gbk)
     report_generate(qc_info_dict, map_info_dict, variant_li, output_dir)
+    print(f"pipeline time cost:{round(time.time() - t1, 2)} s")
     
     
 if __name__ == "__main__":
