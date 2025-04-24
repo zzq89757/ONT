@@ -226,7 +226,7 @@ def mutation_classify(output_vcf: str,ref_seq: str) -> list:
             ref_dp, alt_dp = rec.info['DPS']
             # af = rec.info.get('AF', '.')
             total = ref_dp + alt_dp
-            af = alt_dp / total if total > 0 else 0
+            af = float_leave_1(alt_dp / total * 100) if total > 0 else 0
             # QUAL 过滤
             if rec.qual is not None and rec.qual < 2:
                 continue
@@ -252,7 +252,7 @@ def mutation_classify(output_vcf: str,ref_seq: str) -> list:
                 snps.append({"confidence":confidence, "pos":pos, "ref":ref, "alt":alt, "af": af, "type":type})
             else:
                 sv_type = "Duplication" if len(ref) < max_alt_len else "Deletion"
-                snps.append({"confidence":confidence, "pos":pos,  "sv_type":sv_type, "sv_len":max_alt_len, "af": af, "type":type,})
+                snps.append({"confidence":confidence, "pos":pos, "ref":ref, "alt":alt,  "sv_type":sv_type, "sv_len":indel_num, "af": af, "type":type,})
                 
     # 检查SNP上下游是否为polyA和polyT
     for i, site in enumerate(snps):
