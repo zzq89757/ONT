@@ -355,7 +355,7 @@ def report_generate(qc_info_dict: dict, map_info_dict: dict, variant_li: list, o
     median_read_length = float(data_dict["median_read_length"])
     mean_read_length = float(data_dict["mean_read_length"])
     read_length_stdev = float(data_dict["read_length_stdev"])
-    n50 = data_dict["n50"]
+    n50 = float(data_dict["n50"])
     data_dict["number_of_bases"] = f"{int(number_of_bases):,}"
     data_dict["number_of_reads"] = f"{int(number_of_reads):,}"
     data_dict["median_read_length"] = f"{int(median_read_length):,}"
