@@ -55,7 +55,7 @@ def quality_check(fq_path: str, output_data_path: str) -> dict:
     # 运行NanoFilt 过滤长度低于阈值以及低质量数据
     nanofilt_cmd = f"NanoFilt -q 10 -l 500 {output_data_path}/adapter_trimmed.fq > {output_data_path}/clean_reads.fq"
     # 运行Nanoplot 生成qc报告
-    nanoplot_cmd = f"NanoPlot -t 24 --fastq {output_data_path}/clean_reads.fq -o {qc_res_path} \
+    nanoplot_cmd = f"/mnt/ntc_data/wayne/Software/miniconda3/envs/NTC/bin/NanoPlot -t 24 --fastq {output_data_path}/clean_reads.fq -o {qc_res_path} \
         --tsv_stats --no_static"
     if not Path(f"{output_data_path}/adapter_trimmed.fq").exists():
         system(porechop_cmd)
@@ -132,8 +132,8 @@ def obtain_map_result(ref_len: int, bam_path: str, out_png: str) -> dict:
     if not Path(out_png).exists():
         plot_depth_per_base(pos_li, dep_li, out_png)
     # 计算Avg depth, Median depth,Coverage, Cov 30x, Cov 100x
-    avg_depth = int(np.mean(dep_li))
-    median_depth = int(np.median(dep_li))
+    avg_depth = f"{int(np.mean(dep_li)):,}"
+    median_depth = f"{int(np.median(dep_li)):,}"
     cov = float_leave_1(len(dep_li) / ref_len * 100)
     cov_30x = float_leave_1(len(dep_li > 30) / ref_len * 100)
     cov_100x = float_leave_1(len(dep_li > 100) / ref_len * 100)
@@ -358,7 +358,7 @@ def report_generate(qc_info_dict: dict, map_info_dict: dict, variant_li: list, o
     data_dict["sv_count"] = len(data_dict["sv_list"])
     print(data_dict)
     # 读取模版
-    doc = DocxTemplate(r"./nanopore sequencing report-vb.docx")
+    doc = DocxTemplate(r"./nanopore sequencing report-final.docx")
     # 插入图片
     image_insert(doc,data_dict,output_dir)
     # 渲染报告并转PDF
