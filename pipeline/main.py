@@ -350,14 +350,21 @@ def report_generate(qc_info_dict: dict, map_info_dict: dict, variant_li: list, o
     # 将qc map snp 信息存入同一字典
     data_dict.update(qc_info_dict)
     # 格式化qc整数数字
-    data_dict["number_of_bases"] = f"{qc_info_dict["number_of_bases"]:,}"
-    data_dict["number_of_reads"] = f"{qc_info_dict["number_of_reads"]:,}"
-    data_dict["median_read_length"] = f"{int(qc_info_dict["median_read_length"]):,}"
-    data_dict["mean_read_length"] = f"{int(qc_info_dict["mean_read_length"]):,}"
-    data_dict["read_length_stdev"] = f"{int(qc_info_dict["read_length_stdev"]):,}"
-    data_dict["n50"] = f"{int(qc_info_dict["n50"]):,}"
-    data_dict["ref_len"] = f"{int(qc_info_dict["ref_len"]):,}"
+    number_of_bases = data_dict["number_of_bases"]
+    number_of_reads = data_dict["number_of_reads"]
+    median_read_length = float(data_dict["median_read_length"])
+    mean_read_length = float(data_dict["mean_read_length"])
+    read_length_stdev = float(data_dict["read_length_stdev"])
+    n50 = data_dict["n50"]
+    data_dict["number_of_bases"] = f"{int(number_of_bases):,}"
+    data_dict["number_of_reads"] = f"{int(number_of_reads):,}"
+    data_dict["median_read_length"] = f"{int(median_read_length):,}"
+    data_dict["mean_read_length"] = f"{int(mean_read_length):,}"
+    data_dict["read_length_stdev"] = f"{int(read_length_stdev):,}"
+    data_dict["n50"] = f"{int(n50):,}"
     data_dict.update(map_info_dict)
+    ref_len = data_dict["ref_len"]
+    data_dict["ref_len"] = f"{int(ref_len):,}"
     data_dict["QC"] = "PASS" if float(qc_info_dict["median_qual"]) > 15 else "FAILED"
     data_dict["Mapping"] = "PASS" if float(map_info_dict["map_ratio"].replace("%","")) > 95 and float(map_info_dict["coverage"].replace("%","")) > 95 else "FAILED"
     data_dict["snp_list"] = [] if not variant_li else [x for x in variant_li if x["type"]=="SNP"]
