@@ -349,6 +349,14 @@ def report_generate(qc_info_dict: dict, map_info_dict: dict, variant_li: list, o
     data_dict["proposal_name"] = proposal_name
     # 将qc map snp 信息存入同一字典
     data_dict.update(qc_info_dict)
+    # 格式化qc整数数字
+    data_dict["number_of_bases"] = f"{qc_info_dict["number_of_bases"]:,}"
+    data_dict["number_of_reads"] = f"{qc_info_dict["number_of_reads"]:,}"
+    data_dict["median_read_length"] = f"{int(qc_info_dict["median_read_length"]):,}"
+    data_dict["mean_read_length"] = f"{int(qc_info_dict["mean_read_length"]):,}"
+    data_dict["read_length_stdev"] = f"{int(qc_info_dict["read_length_stdev"]):,}"
+    data_dict["n50"] = f"{int(qc_info_dict["n50"]):,}"
+    data_dict["ref_len"] = f"{int(qc_info_dict["ref_len"]):,}"
     data_dict.update(map_info_dict)
     data_dict["QC"] = "PASS" if float(qc_info_dict["median_qual"]) > 15 else "FAILED"
     data_dict["Mapping"] = "PASS" if float(map_info_dict["map_ratio"].replace("%","")) > 95 and float(map_info_dict["coverage"].replace("%","")) > 95 else "FAILED"
