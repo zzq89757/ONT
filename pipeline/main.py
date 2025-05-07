@@ -123,7 +123,8 @@ def obtain_map_result(ref_len: int, bam_path: str, out_png: str) -> dict:
     # 提取比对率
     flag_info = flagstat(bam_path,"-@","24","-O","tsv")
     match = re.search(r"(\d+\.\d+%)\s+N/A\s+mapped %", flag_info)
-    map_ratio = match.group(1)
+    map_ratio_li = match.group(1).split(".")
+    map_ratio = map_ratio_li[0] + "." + map_ratio_li[1][0] + "%"
     # 深度文件处理
     depths = pd.read_csv(depth_path, sep="\t", header=None)
     pos_li = depths[1].to_numpy()
@@ -209,7 +210,7 @@ def is_low_complexity(seq: str) -> int:
     return len(set(kmers)) < 3      
 
 
-def mutation_classify(output_vcf: str,ref_seq: str) -> list:
+def clair_mutation_classify(output_vcf: str,ref_seq: str) -> list:
     # 读取 VCF 文件中 SNP 位点（忽略 header）
     snps = []
     with VariantFile(output_vcf) as vcf:
@@ -219,31 +220,27 @@ def mutation_classify(output_vcf: str,ref_seq: str) -> list:
             pos = rec.pos
             ref = rec.ref
             alt = ','.join(str(a) for a in rec.alts)
-            # qd = rec.info.get('QD', '.')
-            # fs = rec.info.get('FS', '.')
-            # mq = rec.info.get('MQ', '.')
-            # af = rec.info.get('AF', '.')
-            ref_dp, alt_dp = rec.info['DPS']
-            # af = rec.info.get('AF', '.')
-            total = ref_dp + alt_dp
-            af = float_leave_1(alt_dp / total * 100) if total > 0 else 0
+            gt, gq, dp, af = str(rec).split("\t")[-1].split(":")
+            
+            # AF 过滤
+            if af < 0.3:
+                continue
+            af = float_leave_1(af * 100)
             # QUAL 过滤
             if rec.qual is not None and rec.qual < 2:
                 continue
 
-            # DP 过滤
-            dp = rec.info.get("DP")
-            if dp is None or dp < 1000:
-                continue
-
             # GQ 过滤（从 FORMAT 字段的 SAMPLE 里取）
-            sample = rec.samples[0]  # 假设只有一个样本
-            gq = sample.get("GQ")
             if gq is None or gq < 3:
                 continue
-            # (QD < 2.0 || FS > 60.0 || MQ < 40.0)?
-            # if qd < 2 or fs > 60 or mq < 40:
-            #     confidence = "Low"
+            # DP 过滤
+            if dp is None or dp < 500:
+                continue
+            if dp is None or dp < 1000:
+                confidence = "Low"
+            # GT 过滤
+            if gt == "./.":
+                continue
             # type:SNP/SV
             max_alt_len = max([len(a) for a in rec.alts])
             indel_num = abs(len(ref) - max_alt_len)
@@ -264,32 +261,108 @@ def mutation_classify(output_vcf: str,ref_seq: str) -> list:
         if is_low_complexity(up_stream_seq) or is_low_complexity(down_stream_seq):
             snps[i]["confidence"] = "Low"
     return snps    
-    
+
+
+def sniffles_mutation_classify(output_vcf: str, ref_seq: str) -> list:
+    # 读取 VCF 文件中 SNP 位点（忽略 header）
+    snps = []
+    with VariantFile(output_vcf) as vcf:
+        confidence = "High"
+        for rec in vcf.fetch():
+            chrom = rec.chrom
+            pos = rec.pos
+            ref = rec.ref
+            alt = ','.join(str(a) for a in rec.alts)
+            af = rec.info.get('AF', 0.2)
+            precise = rec.info.get('PRECISE', 0)
+            sv_len = abs(rec.info.get('SVLEN', 0))
+            sv_type = rec.info.get('SVTYPE', '')
+            gt, gq, dr, dv = str(rec).split("\t")[-1].split(":")
+
+            # precise 过滤
+            if not precise:
+                continue
+            # AF 过滤
+            if af < 0.3:
+                continue
+            af = float_leave_1(af * 100)
+            # QUAL 过滤
+            if rec.qual is not None and rec.qual < 2:
+                continue
+
+            # DP 过滤
+            dp = rec.info.get("SUPPORT",0)
+            if dp is None or dp < 1000:
+                continue
+
+            # STDEV_LEN 过滤
+            std_len = rec.info.get("STDEV_LEN",0)
+            if not std_len:
+                continue
+            sample = rec.samples[0]  # 假设只有一个样本
+            gq = sample.get("GQ")
+            if gq is None or gq < 3:
+                continue
+            # GT 过滤
+            if gt == "./.":
+                continue
+            # type:SNP/SV
+            type = "SNP" if sv_len <= 50 else "SV"
+            if type == "SNP":
+                snps.append({"confidence":confidence, "pos":pos, "ref":ref, "alt":alt, "af": af, "type":type})
+            else:
+                sv_type = "Duplication" if sv_type == "DUP" else "Deletion"
+                snps.append({"confidence":confidence, "pos":pos, "ref":ref, "alt":alt, "sv_type":sv_type, "sv_len":sv_len, "af": af, "type":type,})
+                
+    # 检查SNP上下游是否为polyA和polyT
+    for i, site in enumerate(snps):
+        pos = site["pos"]
+        up_stream_pos = (pos - 5, pos)
+        down_stream_pos = (pos, pos + 5)
+        up_stream_seq = ref_seq[up_stream_pos[0]:up_stream_pos[1]]
+        down_stream_seq = ref_seq[down_stream_pos[0]:down_stream_pos[1]]
+        if is_low_complexity(up_stream_seq) or is_low_complexity(down_stream_seq):
+            snps[i]["confidence"] = "Low"
+    return snps  
+
     
 def process_mutation(ref_seq: str, output_dir: str) -> dict:
-    variant_li = []
-    fq_path = f"{output_dir}/clean_reads.fq"
-    model, var_model = get_medaka_model(fq_path)
-    print(f"Use model:{model},{var_model}")
-    # 使用medaka call SNP
-    output_vcf = f"{output_dir}/medaka.annotated.vcf"
-    concensus_cmd = f"medaka_consensus \
-        -i {fq_path} \
-        -d {output_dir}/ref.fa \
-        -o {output_dir} -t 24 \
-        -m {model}"
+    # fq_path = f"{output_dir}/clean_reads.fq"
     
-    variant_cmd = f"medaka_haploid_variant \
-        -i {fq_path} \
-        -r {output_dir}/ref.fa \
-        -o {output_dir} -t 24 \
-        -m {var_model}"
-    if not Path(f"{output_dir}/consensus.fasta").exists():
-        system(concensus_cmd)
-    if not Path(f"{output_dir}/medaka.vcf").exists():
-        system(variant_cmd)
+    # model, var_model = get_medaka_model(fq_path)
+    # print(f"Use model:{model},{var_model}")
+    # # 使用medaka call SNP
+    # output_vcf = f"{output_dir}/medaka.annotated.vcf"
+    # concensus_cmd = f"medaka_consensus \
+    #     -i {fq_path} \
+    #     -d {output_dir}/ref.fa \
+    #     -o {output_dir} -t 24 \
+    #     -m {model}"
+    
+    # variant_cmd = f"medaka_haploid_variant \
+    #     -i {fq_path} \
+    #     -r {output_dir}/ref.fa \
+    #     -o {output_dir} -t 24 \
+    #     -m {var_model}"
+    # if not Path(f"{output_dir}/consensus.fasta").exists():
+    #     system(concensus_cmd)
+    # if not Path(f"{output_dir}/medaka.vcf").exists():
+    #     system(variant_cmd)
+    
+    # 使用clair3和sniffles call SNP
+    clair3_cmd = f"bash /mnt/ntc_data/wayne/Repositories/Clair3/run_clair3.sh \
+                    -b {output_dir}/aln.bam -f {output_dir}/ref.fa -t 24 -p ont \
+                    -m /mnt/ntc_data/wayne/Repositories/Clair3/models/r1041_e82_400bps_sup_v420/ \
+                    -o {output_dir}/clair"
+    sniffles_cmd = f"sniffles -input {output_dir}/aln.bam --threads 24 --vcf {output_dir}/snf.vcf"
+    if not Path(f"{output_dir}/clair").exists():
+        system(clair3_cmd)
+        system(f"gzip -d {output_dir}/clair/merge_output.vcf.gz")
+    if not Path(f"{output_dir}/snf.vcf").exists():
+        system(sniffles_cmd)
+        
     # 将mutation分类至high confidence 和 low confidence并存入字典
-    variant_li = mutation_classify(output_vcf,ref_seq)
+    variant_li = sniffles_mutation_classify(f"{output_dir}/snf.vcf",ref_seq) + clair_mutation_classify(f"{output_dir}/clair/merge_output.vcf",ref_seq)
     return variant_li
     
 
@@ -334,19 +407,11 @@ def convert_to_pdf(docx_path: str, output_dir: str = "."):
 
 
 
-def report_generate(qc_info_dict: dict, map_info_dict: dict, variant_li: list, output_dir: str) -> None:
+def report_generate(user_info_dict: dict, qc_info_dict: dict, map_info_dict: dict, variant_li: list, output_dir: str) -> None:
     data_dict = {}
     # user input message
-    sample_id = "C1413CJPG0-1"
-    clone_id = "-"
-    order = "-"
-    proposal = "-"
-    proposal_name = "-"
-    data_dict["sample_id"] = sample_id
-    data_dict["clone_id"] = clone_id
-    data_dict["order"] = order
-    data_dict["proposal"] = proposal
-    data_dict["proposal_name"] = proposal_name
+    data_dict.update(user_info_dict)
+    
     # 将qc map snp 信息存入同一字典
     data_dict.update(qc_info_dict)
     # 格式化qc整数数字
@@ -377,11 +442,12 @@ def report_generate(qc_info_dict: dict, map_info_dict: dict, variant_li: list, o
     # 插入图片
     image_insert(doc,data_dict,output_dir)
     # 渲染报告并转PDF
+    order = user_info_dict["order"]
     doc.render(data_dict)
-    doc.save(f"{output_dir}/report.docx")
+    doc.save(f"{output_dir}/{order}.docx")
     # convert(f"{output_dir}/report.docx")
-    output_pdf = f"{output_dir}/report.pdf"
-    convert_to_pdf(f"{output_dir}/report.docx",output_dir)
+    output_pdf = f"{output_dir}/{order}.pdf"
+    convert_to_pdf(f"{output_dir}/{order}.docx",output_dir)
     
 
 def main() -> None:
@@ -389,6 +455,18 @@ def main() -> None:
     # input file
     gbk_file = "../painted_fq/C1413CJPG0-1_1220-01-A07-B08.gbk"
     input_fq_file = "../painted_fq/C1413CJPG0-1_1220-01-A07-B08.fastq.gz"
+    # user info
+    user_info_dict = {}
+    sample_id = "C1413CJPG0-1"
+    clone_id = "-"
+    order = "20250507VB"
+    proposal = "-"
+    proposal_name = "-"
+    user_info_dict["sample_id"] = sample_id
+    user_info_dict["clone_id"] = clone_id
+    user_info_dict["order"] = order
+    user_info_dict["proposal"] = proposal
+    user_info_dict["proposal_name"] = proposal_name
     # output dir
     output_dir = "./test_1/"
     # QC and record info and plot plot_read_length_distribution png
@@ -403,7 +481,7 @@ def main() -> None:
     variant_li = process_mutation(ref_seq,output_dir)
     annotated_gbk = output_dir + Path(gbk_file).name.replace(".gbk","_annotated.gbk")
     annotate_mutation_to_gbk(gbk_file,variant_li,annotated_gbk)
-    report_generate(qc_info_dict, map_info_dict, variant_li, output_dir)
+    report_generate(user_info_dict, qc_info_dict, map_info_dict, variant_li, output_dir)
     print(f"pipeline time cost:{round(time.time() - t1, 2)} s")
     
     
