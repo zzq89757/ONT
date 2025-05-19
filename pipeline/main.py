@@ -2,7 +2,7 @@ from os import system
 from pathlib import Path
 import time
 from Bio import SeqIO
-from Bio.SeqFeature import SeqFeature, FeatureLocation
+from Bio.SeqFeature import SeqFeature, FeatureLocation, SimpleLocation
 import numpy as np
 from pysam import index, depth, flagstat, FastqFile, VariantFile
 import pandas as pd
@@ -81,6 +81,8 @@ def reference_info_from_gbk(gbk_file: str, output_data_path: str) -> int:
         print(f">vector",file=fa_handle)
         print(record.seq,file=fa_handle)
         ref_seq = str(record.seq).upper()
+    fa_handle.close()
+    system("samtools faidx " + output_fa)
     return ref_seq
 
 
@@ -219,24 +221,26 @@ def clair_mutation_classify(output_vcf: str,ref_seq: str) -> list:
             chrom = rec.chrom
             pos = rec.pos
             ref = rec.ref
+            # 过滤掉没有替代碱基的记录
+            if not rec.alts:continue
             alt = ','.join(str(a) for a in rec.alts)
-            gt, gq, dp, af = str(rec).split("\t")[-1].split(":")
+            gt, gq, dp, ad, af = str(rec).split("\t")[-1].split(":")
             
             # AF 过滤
-            if af < 0.3:
+            if float(af) < 0.3:
                 continue
-            af = float_leave_1(af * 100)
+            af = float_leave_1(float(af) * 100)
             # QUAL 过滤
             if rec.qual is not None and rec.qual < 2:
                 continue
 
             # GQ 过滤（从 FORMAT 字段的 SAMPLE 里取）
-            if gq is None or gq < 3:
+            if gq is None or float(gq) < 3:
                 continue
             # DP 过滤
-            if dp is None or dp < 500:
+            if dp is None or int(dp) < 500:
                 continue
-            if dp is None or dp < 1000:
+            if dp is None or int(dp) < 1000:
                 confidence = "Low"
             # GT 过滤
             if gt == "./.":
@@ -350,15 +354,17 @@ def process_mutation(ref_seq: str, output_dir: str) -> dict:
     #     system(variant_cmd)
     
     # 使用clair3和sniffles call SNP
-    clair3_cmd = f"bash /mnt/ntc_data/wayne/Repositories/Clair3/run_clair3.sh \
+    clair3_cmd = f"bash /mnt/ntc_data/wayne/Repositories/Clair3/run_clair3.sh --include_all_ctgs --no_phasing_for_fa\
                     -b {output_dir}/aln.bam -f {output_dir}/ref.fa -t 24 -p ont \
                     -m /mnt/ntc_data/wayne/Repositories/Clair3/models/r1041_e82_400bps_sup_v420/ \
                     -o {output_dir}/clair"
-    sniffles_cmd = f"sniffles -input {output_dir}/aln.bam --threads 24 --vcf {output_dir}/snf.vcf"
-    if not Path(f"{output_dir}/clair").exists():
+    sniffles_cmd = f"sniffles --input {output_dir}/aln.bam --threads 24 --vcf {output_dir}/snf.vcf"
+    if not Path(f"{output_dir}/clair/merge_output.vcf").exists():
+        print(clair3_cmd)
         system(clair3_cmd)
         system(f"gzip -d {output_dir}/clair/merge_output.vcf.gz")
     if not Path(f"{output_dir}/snf.vcf").exists():
+        print(sniffles_cmd)
         system(sniffles_cmd)
         
     # 将mutation分类至high confidence 和 low confidence并存入字典
@@ -371,22 +377,37 @@ def annotate_mutation_to_gbk(gbk_file: str, snp_li: list, output_file: str) -> N
     record = SeqIO.read(gbk_file, "genbank")
     # 添加 feature 注释
     for snp in snp_li:
-        pos = snp["pos"]
-        ref = snp["ref"]
-        alt = snp["alt"]
         type = snp["type"]
-        af = snp["af"]
-        confidence = snp["confidence"]
-        feature = SeqFeature(
-            location=FeatureLocation(pos, pos + 1),
-            type="variation",
-            qualifiers={
-                "note": [f"{type}: {ref}>{alt},AF:{af}({confidence} Confidence)"],
-                "ref": ref,
-                "alt": alt
-            }
-        )
-        record.features.append(feature)
+        if type == "SNP":
+            pos = snp["pos"]
+            ref = snp["ref"]
+            alt = snp["alt"]
+            af = snp["af"]
+            confidence = snp["confidence"]
+            feature = SeqFeature(
+                location=SimpleLocation(pos - 1, pos),
+                type="SNP",
+                qualifiers={
+                    "note": [f"{type}: {ref}>{alt},AF:{af}({confidence} Confidence)"],
+                    "ref": ref,
+                    "alt": alt
+                }
+            )
+            record.features.append(feature)
+        else:
+            pos = snp["pos"]
+            len = snp["sv_len"]
+            sv_type = snp["sv_type"]
+            af = snp["af"]
+            confidence = snp["confidence"]
+            feature = SeqFeature(
+                location=SimpleLocation(pos - 1, pos),
+                type="SV",
+                qualifiers={
+                    "note": [f"{sv_type}:{len}bp,AF:{af}({confidence} Confidence)"]
+                }
+            )
+            record.features.append(feature)
     # 写出新的 gbk 文件
     with open(output_file, "w") as out_handle:
         SeqIO.write(record, out_handle, "genbank")
@@ -459,7 +480,7 @@ def main() -> None:
     user_info_dict = {}
     sample_id = "C1413CJPG0-1"
     clone_id = "-"
-    order = "20250507VB"
+    order = "C1413CJPG0-1"
     proposal = "-"
     proposal_name = "-"
     user_info_dict["sample_id"] = sample_id
@@ -468,7 +489,8 @@ def main() -> None:
     user_info_dict["proposal"] = proposal
     user_info_dict["proposal_name"] = proposal_name
     # output dir
-    output_dir = "./test_1/"
+    # output_dir = "./C1880JSBG0-2_A02/"
+    output_dir = f"./{sample_id}/"
     # QC and record info and plot plot_read_length_distribution png
     qc_info_dict = quality_check(input_fq_file, output_dir)
     # extract info and seq from gbk
@@ -479,7 +501,7 @@ def main() -> None:
     # extract map info from bam file and plot depth per base png
     map_info_dict = obtain_map_result(ref_len, f"{output_dir}/aln.bam",f"{output_dir}/depth_per_base.png")
     variant_li = process_mutation(ref_seq,output_dir)
-    annotated_gbk = output_dir + Path(gbk_file).name.replace(".gbk","_annotated.gbk")
+    annotated_gbk = output_dir + Path(gbk_file).name.replace(".gb","_annotated.gb")
     annotate_mutation_to_gbk(gbk_file,variant_li,annotated_gbk)
     report_generate(user_info_dict, qc_info_dict, map_info_dict, variant_li, output_dir)
     print(f"pipeline time cost:{round(time.time() - t1, 2)} s")
