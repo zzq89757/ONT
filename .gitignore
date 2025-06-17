@@ -18,3 +18,11 @@ clo
 CMD
 CONTIGS
 *tbi
+.nextflow*
+clair
+run
+work
+nextflow
+.snakemake*
+painted_fq
+*.gz

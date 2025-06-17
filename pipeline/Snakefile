@@ -1,0 +1,18 @@
+SAMPLES = ["1_A01", "2_A02", "3_A03"]
+
+
+rule bwa_map:
+    # conda:
+    #     "/mnt/ntc_data/wayne/Software/miniconda3/envs/NTC"
+    input:
+        lambda wildcards: f"/mnt/ntc_data/wayne/Project/NTC/ONT/pipeline/C1880JSBG0-{wildcards.id}/ref.fa",
+        lambda wildcards: f"/mnt/ntc_data/wayne/Project/NTC/ONT/pipeline/C1880JSBG0-{wildcards.id}/clean_reads.fq"
+    output:
+        "/mnt/ntc_data/wayne/Project/NTC/ONT/pipeline/_C1880JSBG0-{id}/aln.bam"
+    shell:
+        "bwa mem {input} | samtools view -Sb - > {output}"
+
+# 一个常见的错误是忘记输入或输出项之间的逗号。 由于 Python 连接后续字符串，这可能会导致抱错
+rule all:
+    input:
+        expand("/mnt/ntc_data/wayne/Project/NTC/ONT/pipeline/_C1880JSBG0-{id}/aln.bam", id=SAMPLES)
