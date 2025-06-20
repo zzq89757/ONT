@@ -39,4 +39,18 @@
 # python sequencing_analysis.py -f1 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250224-1671way.gb -f2 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/RI03-2.fastq.gz -dir run/plasmid_0616/RI03-2 -sample_id RI03-2 -order RI03-2
 
 
-python sequencing_analysis.py -f1 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250224-1671way.gb -f2 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/RI03-2.fastq.gz -dir run/plasmid_0616/RI03-2 -sample_id RI03-2 -order RI03-2
+# python sequencing_analysis.py -f1 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250612-1022kcm.gb -f2 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250612-1022kcm.fastq.gz -dir run/plasmid_0618/RI03-2 -sample_id VB250612-1022kcm -order VB250612-1022kcm
+# python sequencing_analysis.py -f1 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/addgene-plasmid-12371-sequence-419910.gb -f2 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/addgene-plasmid-12371-sequence-419910.fastq.gz -dir run/plasmid_0618/addgene-plasmid-12371 -sample_id addgene-plasmid-12371 -order addgene-plasmid-12371
+
+
+# python sequencing_analysis.py -f1 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250507-2574xab_1.gb -f2 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250507-2574xab_1.fastq.gz -dir run/plasmid_0618/VB250507-2574xab -sample_id VB250507-2574xab -order VB250507-2574xab
+
+
+# python sequencing_analysis.py -f1 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/C-PS251109vhp_0619.gb -f2 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/C0233JPMG0-1-Nanopore.fastq.gz -dir run/plasmid_0619/C-PS251109vhp -sample_id C-PS251109vhp -order C-PS251109vhp
+
+
+# python sequencing_analysis.py -f1 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250225-1829pjc.gb -f2 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250225-1829pjc.fastq.gz -dir run/plasmid_0620/VB250225-1829pjc -sample_id VB250225-1829pjc -order VB250225-1829pjc
+# python sequencing_analysis.py -f1 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250225-1819epc.gb -f2 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250225-1819epc.fastq.gz -dir run/plasmid_0620/VB250225-1819epc -sample_id VB250225-1819epc -order VB250225-1819epc
+# python sequencing_analysis.py -f1 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250225-1800fbh.gb -f2 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250225-1800fbh.fastq.gz -dir run/plasmid_0620/VB250225-1800fbh -sample_id VB250225-1800fbh -order VB250225-1800fbh
+# python sequencing_analysis.py -f1 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250225-1791gya.gb -f2 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250225-1791gya.fastq.gz -dir run/plasmid_0620/VB250225-1791gya -sample_id VB250225-1791gya -order VB250225-1791gya
+python sequencing_analysis.py -f1 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250225-1744cfk.gb -f2 /mnt/ntc_data/wayne/Project/NTC/ONT/painted_fq/VB250225-1744cfk.fastq.gz -dir run/plasmid_0620/VB250225-1744cfk -sample_id VB250225-1744cfk -order VB250225-1744cfk

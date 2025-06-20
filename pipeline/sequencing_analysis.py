@@ -275,11 +275,18 @@ def clair_mutation_classify(output_vcf: str, ref_seq: str) -> list:
             if not rec.alts: continue
             alt = ','.join(str(a) for a in rec.alts)
             gt, gq, dp, ad, af = str(rec).split("\t")[-1].split(":")
-
+            # print(af)
             # AF 过滤
-            if float(af) < 0.3:
-                continue
-            af = float_leave_1(float(af) * 100)
+            if af.find(",") != -1:
+                af_li = [float(x) for x in af.split(",")]
+                if not any(x >= 0.3 for x in af_li):
+                    continue
+                af_li = [float_leave_1(float(x) * 100) for x in af_li]
+                af = ",".join(af_li)
+            else: 
+                if float(af) < 0.3:
+                    continue
+                af = float_leave_1(float(af) * 100)
             # QUAL 过滤
             if rec.qual is not None and rec.qual < 2:
                 continue
@@ -366,7 +373,7 @@ def sniffles_mutation_classify(output_vcf: str, ref_seq: str) -> list:
             if type == "SNP":
                 snps.append({"confidence": confidence, "pos": pos, "ref": ref, "alt": alt, "af": af, "type": type})
             else:
-                sv_type = "Duplication" if sv_type == "DUP" else "Deletion"
+                sv_type = "Duplication" if sv_type == "INS" else "Deletion"
                 snps.append(
                     {"confidence": confidence, "pos": pos, "ref": ref, "alt": alt, "sv_type": sv_type, "sv_len": sv_len,
                      "af": af, "type": type, })
