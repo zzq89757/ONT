@@ -560,7 +560,7 @@ if __name__ == "__main__":
     """
     parser.add_argument('-f1', dest='input_file1', required=True)  # 输入gbk文件  ./data03/99/gbk_file.gbk
     parser.add_argument('-f2', dest='input_file2', required=True)  # 输入fq文件  ./data03/99/fq_file.fastq.gz
-    parser.add_argument('-dir', dest='output_dir', required=True)  # 输出文件夹  ./data03/99/result.txt
+    parser.add_argument('-dir', dest='output_dir', required=True)  # 输出文件夹  ./data03/99/result/
     parser.add_argument('-sample_id', dest='sample_id', required=True)
     parser.add_argument('-order', dest='order', required=True)
     parser.add_argument('-proposal', dest='proposal', default="-")
